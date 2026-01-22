@@ -1,0 +1,39 @@
+.quick-block-btn {
+    position: absolute !important;
+    top: 8px !important;
+    left: 8px !important;
+    width: 32px !important;
+    height: 32px !important;
+    background: rgba(40, 40, 40, 0.9) !important;
+    border: none !important;
+    border-radius: 50% !important;
+    color: #aaa !important;
+    font-size: 18px !important;
+    font-weight: 300 !important;
+    cursor: pointer !important;
+    z-index: 100 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    transition: opacity 0.2s, background 0.2s, color 0.2s !important;
+    pointer-events: auto !important;
+}
+
+.quick-block-btn:hover {
+    background: rgba(60, 60, 60, 0.95) !important;
+    color: #fff !important;
+}
+
+ytd-rich-item-renderer:hover .quick-block-btn,
+ytd-video-renderer:hover .quick-block-btn,
+ytd-compact-video-renderer:hover .quick-block-btn {
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+yt-thumbnail-view-model {
+    overflow: visible !important;
+    position: relative !important;
+}

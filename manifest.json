@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Quick Not Interested",
+  "version": "1.0",
+  "description": "Adds X button to quickly mark videos as Not Interested",
+  "permissions": [],
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
