@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="app">
+        <header class="hdr">
+            <div class="dot"></div>
+            <h1>Quick Block</h1>
+        </header>
+
+        <section class="stat" aria-label="Hidden today">
+            <div class="stat-label">HIDDEN TODAY</div>
+            <div class="stat-value" id="hiddenToday">—</div>
+        </section>
+
+        <section class="row">
+            <label class="row-label" for="hideToggle">Hide Watch Later</label>
+            <label class="switch">
+                <input type="checkbox" id="hideToggle">
+                <span class="slider"></span>
+            </label>
+        </section>
+
+        <section class="sync">
+            <div class="sync-meta">
+                <div><span id="wlCount">—</span> in Watch Later</div>
+                <div class="sync-when" id="syncWhen">Never synced</div>
+            </div>
+            <button class="btn-primary" id="syncBtn">Sync now</button>
+        </section>
+
+        <section class="recent">
+            <details>
+                <summary>Recently hidden</summary>
+                <ul id="recentList" class="recent-list"></ul>
+            </details>
+        </section>
+
+        <section class="import">
+            <details>
+                <summary>Import IDs</summary>
+                <div class="import-body">
+                    <p class="hint">Paste video IDs (one per line) from <code>scripts/dump-wl-ids.sh</code></p>
+                    <textarea id="importText" placeholder="dQw4w9WgXcQ&#10;abc123..." rows="4"></textarea>
+                    <div class="import-actions">
+                        <label class="merge"><input type="checkbox" id="importMerge" checked> Merge with existing</label>
+                        <button class="btn-primary" id="importBtn">Save</button>
+                    </div>
+                </div>
+            </details>
+        </section>
+
+        <footer class="ftr">
+            <button class="btn-link" id="clearBtn">Clear data</button>
+        </footer>
+    </div>
+    <script src="lib/storage.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>

@@ -1,3 +1,4 @@
+/* X button on hover */
 .quick-block-btn {
     position: absolute !important;
     top: 8px !important;
@@ -38,7 +39,7 @@ yt-thumbnail-view-model {
     position: relative !important;
 }
 
-/* Hide menu flicker during Not Interested click */
+/* Suppress menu popup flicker during programmatic click */
 body.quick-block-suppress-menu tp-yt-iron-dropdown,
 body.quick-block-suppress-menu ytd-menu-popup-renderer,
 body.quick-block-suppress-menu ytd-popup-container {
@@ -48,5 +49,10 @@ body.quick-block-suppress-menu ytd-popup-container {
 
 /* Hide ysm-tags */
 .ysm-tags {
+    display: none !important;
+}
+
+/* Hidden video: collapsed cleanly out of grid */
+ytd-rich-item-renderer.quick-block-hidden {
     display: none !important;
 }

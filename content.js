@@ -1,218 +1,213 @@
 (function() {
     'use strict';
 
-    console.log('[Quick Block] Extension loaded!');
-
     const PROCESSED_ATTR = 'data-quick-block-added';
+    const HIDE_CHECKED_ATTR = 'data-quick-hide-checked';
+    const HIDDEN_CLASS = 'quick-block-hidden';
 
+    const Storage = self.QuickBlockStorage;
+
+    let wlIds = new Set();
+    let hideEnabled = true;
+    const sessionRestored = new Set(); // IDs user restored this session
+    let lastMenuVideoElement = null;    // for capturing "Save to Watch later" clicks
+
+    // ── X button (Not Interested) ──────────────────────────────────────────────
     function addBlockButton(videoElement) {
         try {
-            if (videoElement.hasAttribute(PROCESSED_ATTR)) {
-                console.log('[Quick Block] Video already processed, skipping');
-                return;
-            }
+            if (videoElement.hasAttribute(PROCESSED_ATTR)) return;
             videoElement.setAttribute(PROCESSED_ATTR, 'true');
 
             const thumbnail = videoElement.querySelector('yt-thumbnail-view-model');
-            if (!thumbnail) {
-                console.log('[Quick Block] No thumbnail found for video:', videoElement);
-                return;
-            }
+            if (!thumbnail) return;
 
-        const btn = document.createElement('button');
-        btn.className = 'quick-block-btn';
-        btn.textContent = '✕';
-        btn.title = 'Not interested';
+            const btn = document.createElement('button');
+            btn.className = 'quick-block-btn';
+            btn.textContent = '✕';
+            btn.title = 'Not interested';
 
-        btn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('[Quick Block] Button clicked!');
-            await markNotInterested(videoElement);
-        });
-
-        // DIAGNOSTIC: Add JS-based hover as fallback test
-        videoElement.addEventListener('mouseenter', () => {
-            const allVideos = Array.from(document.querySelectorAll('ytd-rich-item-renderer'));
-            const videoIndex = allVideos.indexOf(videoElement);
-            console.log(`[Quick Block] JS mouseenter fired on video index ${videoIndex}`, {
-                buttonExists: !!btn,
-                buttonParent: btn.parentElement?.tagName,
-                currentOpacity: btn.style.opacity || window.getComputedStyle(btn).opacity,
-                currentVisibility: btn.style.visibility || window.getComputedStyle(btn).visibility,
-                buttonRect: btn.getBoundingClientRect()
+            btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                lastMenuVideoElement = videoElement;
+                await markNotInterested(videoElement);
             });
-            btn.style.setProperty('opacity', '1', 'important');
-            btn.style.setProperty('visibility', 'visible', 'important');
-        });
 
-        videoElement.addEventListener('mouseleave', () => {
-            console.log('[Quick Block] JS mouseleave fired');
-            btn.style.setProperty('opacity', '0', 'important');
-            btn.style.setProperty('visibility', 'hidden', 'important');
-        });
-
-        thumbnail.appendChild(btn);
-
-        // DIAGNOSTIC: Check position and parent structure
-        const rect = videoElement.getBoundingClientRect();
-        const isFirstRow = rect.top < 500; // Rough check for first row
-
-        // Check if button is actually a descendant of ytd-rich-item-renderer
-        const isDescendant = videoElement.contains(btn);
-
-        // Get the path from button to videoElement
-        let pathElements = [];
-        let current = btn.parentElement;
-        while (current && current !== videoElement) {
-            pathElements.push(current.tagName.toLowerCase());
-            current = current.parentElement;
-        }
-
-        console.log('[Quick Block] Button added to video', {
-            isFirstRow,
-            top: rect.top,
-            hasParent: !!videoElement.parentElement,
-            buttonInDOM: document.contains(btn),
-            isDescendantOfRenderer: isDescendant,
-            domPath: pathElements.join(' > '),
-            thumbnailPosition: window.getComputedStyle(thumbnail).position,
-            buttonStyles: {
-                opacity: window.getComputedStyle(btn).opacity,
-                visibility: window.getComputedStyle(btn).visibility,
-                zIndex: window.getComputedStyle(btn).zIndex
-            }
-        });
+            thumbnail.appendChild(btn);
         } catch (error) {
-            console.error('[Quick Block] Error adding button:', error, videoElement);
+            console.error('[Quick Block] addBlockButton error:', error);
         }
     }
 
     async function markNotInterested(videoElement) {
         const menuBtn = videoElement.querySelector('button[aria-label="More actions"]');
-        if (!menuBtn) {
-            console.log('[Quick Block] Menu button not found');
-            return;
-        }
+        if (!menuBtn) return;
 
         document.body.classList.add('quick-block-suppress-menu');
         menuBtn.click();
-
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(r => setTimeout(r, 300));
 
         const titles = document.querySelectorAll('.ytListItemViewModelTitle, .yt-list-item-view-model__title');
         for (const title of titles) {
             if (title.textContent.trim() === 'Not interested') {
                 const item = title.closest('yt-list-item-view-model, [role="menuitem"]') || title;
                 item.click();
-                console.log('[Quick Block] Clicked Not interested');
                 setTimeout(() => document.body.classList.remove('quick-block-suppress-menu'), 100);
                 return;
             }
         }
-
-        // Close menu if "Not interested" not found
         document.body.click();
         document.body.classList.remove('quick-block-suppress-menu');
-        console.log('[Quick Block] Not interested option not found');
     }
 
+    // ── Video ID extraction ────────────────────────────────────────────────────
+    function getVideoId(videoElement) {
+        const a = videoElement.querySelector('a[href*="/watch?v="]');
+        if (!a) return null;
+        const m = a.getAttribute('href').match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+        return m ? m[1] : null;
+    }
+
+    function getVideoTitle(videoElement) {
+        const t = videoElement.querySelector('#video-title, yt-formatted-string.ytd-rich-grid-media, span.yt-core-attributed-string');
+        return (t?.textContent || '').trim().slice(0, 120);
+    }
+
+    // ── Hide ──────────────────────────────────────────────────────────────────
+    function hideVideo(videoElement, id) {
+        if (videoElement.classList.contains(HIDDEN_CLASS)) return;
+        const title = getVideoTitle(videoElement);
+        videoElement.classList.add(HIDDEN_CLASS);
+        Storage.logHidden(id, title || id).catch(() => {});
+    }
+
+    function maybeHide(videoElement) {
+        if (!hideEnabled) return;
+        if (videoElement.hasAttribute(HIDE_CHECKED_ATTR)) return;
+        videoElement.setAttribute(HIDE_CHECKED_ATTR, 'true');
+        const id = getVideoId(videoElement);
+        if (!id) return;
+        if (sessionRestored.has(id)) return;
+        if (wlIds.has(id)) hideVideo(videoElement, id);
+    }
+
+    function unhideAll() {
+        document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach(el => {
+            el.classList.remove(HIDDEN_CLASS);
+            el.removeAttribute(HIDE_CHECKED_ATTR);
+        });
+    }
+
+    function rescanAll() {
+        document.querySelectorAll('ytd-rich-item-renderer').forEach(el => {
+            el.removeAttribute(HIDE_CHECKED_ATTR);
+            maybeHide(el);
+        });
+    }
+
+    // ── Process new videos ─────────────────────────────────────────────────────
     function processVideos() {
-        const cards = document.querySelectorAll('ytd-rich-item-renderer:not([' + PROCESSED_ATTR + '])');
-        if (cards.length > 0) {
-            console.log('[Quick Block] Processing', cards.length, 'new videos');
-            cards.forEach((card, index) => {
-                console.log(`[Quick Block] Processing video ${index}`, {
-                    tagName: card.tagName,
-                    className: card.className,
-                    hasThumbnail: !!card.querySelector('yt-thumbnail-view-model'),
-                    rect: card.getBoundingClientRect()
-                });
-                addBlockButton(card);
-            });
+        const cards = document.querySelectorAll('ytd-rich-item-renderer');
+        cards.forEach(card => {
+            addBlockButton(card);
+            maybeHide(card);
+        });
+    }
+
+    // ── Capture WL membership changes from any UI path ────────────────────────
+    async function recordWlAdd(id) {
+        if (!id) return;
+        wlIds.add(id);
+        await Storage.addWlId(id);
+    }
+    async function recordWlRemove(id) {
+        if (!id) return;
+        wlIds.delete(id);
+        await Storage.removeWlId(id);
+    }
+
+    document.addEventListener('click', (e) => {
+        const target = e.target;
+
+        // Track which video the "More actions" menu was opened for
+        const moreBtn = target.closest('button[aria-label="More actions"]');
+        if (moreBtn) {
+            lastMenuVideoElement = moreBtn.closest('ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer');
         }
+
+        // Inline thumbnail "Watch later" overlay button (clock icon)
+        const wlBtn = target.closest('button[aria-label="Watch later"], button[aria-label="Remove from Watch later"]');
+        if (wlBtn) {
+            const label = wlBtn.getAttribute('aria-label');
+            const videoEl = wlBtn.closest('ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, ytd-grid-video-renderer');
+            const id = videoEl ? getVideoId(videoEl) : null;
+            if (id) {
+                if (label === 'Watch later') recordWlAdd(id);
+                else recordWlRemove(id);
+            }
+        }
+
+        // Dropdown menu items
+        const menuItem = target.closest('yt-list-item-view-model, [role="menuitem"]');
+        if (menuItem) {
+            const titleEl = menuItem.querySelector('.ytListItemViewModelTitle, .yt-list-item-view-model__title');
+            const text = titleEl?.textContent?.trim();
+            if (text === 'Save to Watch later' && lastMenuVideoElement) {
+                recordWlAdd(getVideoId(lastMenuVideoElement));
+            } else if (text === 'Remove from Watch later' && lastMenuVideoElement) {
+                recordWlRemove(getVideoId(lastMenuVideoElement));
+            }
+        }
+    }, true);
+
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+        if (msg?.type === 'rescan') {
+            loadStateAndRescan().then(() => sendResponse({ ok: true }));
+            return true;
+        }
+    });
+
+    // ── React to storage changes (popup toggles, click capture, etc.) ─────────
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local') return;
+        if (changes[Storage.KEYS.WL_IDS]) {
+            wlIds = new Set(changes[Storage.KEYS.WL_IDS].newValue || []);
+            rescanAll();
+        }
+        if (changes[Storage.KEYS.SETTINGS]) {
+            const newSettings = changes[Storage.KEYS.SETTINGS].newValue || {};
+            const wasEnabled = hideEnabled;
+            hideEnabled = newSettings.hideEnabled !== false;
+            if (wasEnabled && !hideEnabled) unhideAll();
+            else if (!wasEnabled && hideEnabled) rescanAll();
+        }
+    });
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+    async function loadStateAndRescan() {
+        wlIds = await Storage.getWlIds();
+        const settings = await Storage.getSettings();
+        hideEnabled = settings.hideEnabled !== false;
+        rescanAll();
     }
 
-    function init() {
-        console.log('[Quick Block] Initializing...');
+    async function init() {
+        await loadStateAndRescan();
+        processVideos();
+        setTimeout(processVideos, 500);
+        setTimeout(processVideos, 1500);
 
-        // DIAGNOSTIC: Check ALL video-related elements
-        const richItems = document.querySelectorAll('ytd-rich-item-renderer');
-        const videoRenderers = document.querySelectorAll('ytd-video-renderer');
-        const compactRenderers = document.querySelectorAll('ytd-compact-video-renderer');
+        const observer = new MutationObserver(() => processVideos());
+        observer.observe(document.body, { childList: true, subtree: true });
 
-        console.log(`[Quick Block] Found video elements:`, {
-            richItems: richItems.length,
-            videoRenderers: videoRenderers.length,
-            compactRenderers: compactRenderers.length
-        });
-
-        richItems.forEach((video, idx) => {
-            if (idx < 5) { // Log first 5 videos
-                console.log(`[Quick Block] ytd-rich-item-renderer ${idx}:`, {
-                    alreadyProcessed: video.hasAttribute(PROCESSED_ATTR),
-                    hasButton: !!video.querySelector('.quick-block-btn'),
-                    classes: video.className,
-                    isHidden: video.style.display === 'none' || video.hidden,
-                    offsetTop: video.offsetTop
-                });
-            }
-        });
-
-        // FIX: Process videos multiple times with delays to catch early-loaded videos
-        // This handles the race condition where first videos load before extension is ready
-        processVideos(); // Immediate
-        setTimeout(() => {
-            console.log('[Quick Block] Retry 1: Processing after 100ms...');
-            processVideos();
-        }, 100);
-        setTimeout(() => {
-            console.log('[Quick Block] Retry 2: Processing after 500ms...');
-            processVideos();
-        }, 500);
-        setTimeout(() => {
-            console.log('[Quick Block] Retry 3: Processing after 1000ms...');
-            processVideos();
-        }, 1000);
-
-        // Watch for new videos (infinite scroll)
-        const observer = new MutationObserver(() => {
-            processVideos();
-        });
-
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-
-        // DIAGNOSTIC: Add hover detection on first row
-        document.addEventListener('mouseover', (e) => {
-            const video = e.target.closest('ytd-rich-item-renderer');
-            if (video) {
-                const btn = video.querySelector('.quick-block-btn');
-                const rect = video.getBoundingClientRect();
-                if (rect.top < 500 && btn) {
-                    console.log('[Quick Block] Hover on first-row video', {
-                        hasButton: !!btn,
-                        buttonStyles: {
-                            opacity: window.getComputedStyle(btn).opacity,
-                            visibility: window.getComputedStyle(btn).visibility,
-                            display: window.getComputedStyle(btn).display
-                        },
-                        videoHasHoverClass: video.matches(':hover')
-                    });
-                }
-            }
-        }, { passive: true });
-
-        console.log('[Quick Block] Observer started');
+        // First-run: if we've never synced, kick one off via background
+        const last = await Storage.getLastSync();
+        if (!last) chrome.runtime.sendMessage({ type: 'request-sync' }).catch(() => {});
     }
 
-    // Start when DOM is ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
-
 })();
