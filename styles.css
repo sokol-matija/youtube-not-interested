@@ -56,3 +56,18 @@ body.quick-block-suppress-menu ytd-popup-container {
 ytd-rich-item-renderer.quick-block-hidden {
     display: none !important;
 }
+
+/* Hide bottom comments section on watch page */
+body.quick-block-hide-comments ytd-comments#comments {
+    display: none !important;
+}
+
+/* Hide Share button */
+body.quick-block-hide-share button[aria-label="Share"] {
+    display: none !important;
+}
+
+/* Hide Thanks button */
+body.quick-block-hide-thanks button[aria-label="Thanks"] {
+    display: none !important;
+}

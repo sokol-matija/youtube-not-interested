@@ -40,6 +40,11 @@ async function render() {
     $('#wlCount').textContent = wlCount;
     $('#syncWhen').textContent = fmtRelative(lastSync);
     $('#hideToggle').checked = settings.hideEnabled !== false;
+    $('#autoFsToggle').checked = !!settings.autoFullscreen;
+    $('#autoCommentsToggle').checked = !!settings.autoOpenComments;
+    $('#hideBottomCommentsToggle').checked = !!settings.hideBottomComments;
+    $('#hideShareToggle').checked = !!settings.hideShareButton;
+    $('#hideThanksToggle').checked = !!settings.hideThanksButton;
 
     const list = $('#recentList');
     list.innerHTML = '';
@@ -82,6 +87,26 @@ $('#hideToggle').addEventListener('change', async (e) => {
     await Storage.setSettings({ hideEnabled: e.target.checked });
 });
 
+$('#autoFsToggle').addEventListener('change', async (e) => {
+    await Storage.setSettings({ autoFullscreen: e.target.checked });
+});
+
+$('#autoCommentsToggle').addEventListener('change', async (e) => {
+    await Storage.setSettings({ autoOpenComments: e.target.checked });
+});
+
+$('#hideBottomCommentsToggle').addEventListener('change', async (e) => {
+    await Storage.setSettings({ hideBottomComments: e.target.checked });
+});
+
+$('#hideShareToggle').addEventListener('change', async (e) => {
+    await Storage.setSettings({ hideShareButton: e.target.checked });
+});
+
+$('#hideThanksToggle').addEventListener('change', async (e) => {
+    await Storage.setSettings({ hideThanksButton: e.target.checked });
+});
+
 $('#syncBtn').addEventListener('click', async () => {
     const btn = $('#syncBtn');
     btn.disabled = true;
@@ -108,7 +133,9 @@ $('#syncBtn').addEventListener('click', async () => {
         if (result.debug) {
             console.log('[Quick Block] sync debug:', JSON.stringify(result.debug, null, 2));
         }
-        showToast(`Synced ${result.count ?? ''} videos`);
+        const added = result.added ?? 0;
+        const fetched = result.fetched ?? result.count ?? 0;
+        showToast(`Synced ${fetched} (+${added} new, total ${result.count})`);
     }
     render();
 });

@@ -7,6 +7,15 @@
 
     const Storage = self.QuickBlockStorage;
 
+    // Detect orphaned content script (extension reloaded, this script's context dead)
+    function extensionAlive() {
+        try { return !!chrome.runtime?.id; } catch { return false; }
+    }
+    window.addEventListener('unhandledrejection', (e) => {
+        const msg = e.reason?.message || '';
+        if (msg.includes('Extension context invalidated')) e.preventDefault();
+    });
+
     let wlIds = new Set();
     let hideEnabled = true;
     const sessionRestored = new Set(); // IDs user restored this session
@@ -107,6 +116,7 @@
 
     // ── Process new videos ─────────────────────────────────────────────────────
     function processVideos() {
+        if (!extensionAlive()) return;
         const cards = document.querySelectorAll('ytd-rich-item-renderer');
         cards.forEach(card => {
             addBlockButton(card);
@@ -127,6 +137,7 @@
     }
 
     document.addEventListener('click', (e) => {
+        if (!extensionAlive()) return;
         const target = e.target;
 
         // Track which video the "More actions" menu was opened for
@@ -167,6 +178,18 @@
         }
     });
 
+    function applyBottomCommentsToggle(on) {
+        document.body.classList.toggle('quick-block-hide-comments', !!on);
+    }
+
+    function applyShareToggle(on) {
+        document.body.classList.toggle('quick-block-hide-share', !!on);
+    }
+
+    function applyThanksToggle(on) {
+        document.body.classList.toggle('quick-block-hide-thanks', !!on);
+    }
+
     // ── React to storage changes (popup toggles, click capture, etc.) ─────────
     chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') return;
@@ -180,14 +203,120 @@
             hideEnabled = newSettings.hideEnabled !== false;
             if (wasEnabled && !hideEnabled) unhideAll();
             else if (!wasEnabled && hideEnabled) rescanAll();
+            applyBottomCommentsToggle(newSettings.hideBottomComments);
+            applyShareToggle(newSettings.hideShareButton);
+            applyThanksToggle(newSettings.hideThanksButton);
         }
     });
+
+    // ── Watch-page automations ────────────────────────────────────────────────
+    let lastWatchVideoId = null;
+
+    async function waitForElement(selector, timeoutMs = 5000) {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            const el = document.querySelector(selector);
+            if (el) return el;
+            await new Promise(r => setTimeout(r, 100));
+        }
+        return null;
+    }
+
+    function currentWatchVideoId() {
+        const m = location.href.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+        return location.pathname === '/watch' && m ? m[1] : null;
+    }
+
+    async function ensureVideoPlaying(timeoutMs = 4000) {
+        const start = Date.now();
+        let video = null;
+        while (Date.now() - start < timeoutMs) {
+            video = document.querySelector('video.html5-main-video');
+            if (video && video.readyState >= 2) break;
+            await new Promise(r => setTimeout(r, 100));
+        }
+        if (!video) return null;
+
+        if (video.paused) {
+            try { await video.play(); } catch {}
+        }
+        // If still paused (autoplay blocked), try clicking the big play button
+        if (video.paused) {
+            const bigPlay = document.querySelector('.ytp-large-play-button, .ytp-play-button');
+            if (bigPlay) bigPlay.click();
+        }
+        // Wait briefly for playback to actually start
+        const playStart = Date.now();
+        while (Date.now() - playStart < 1500) {
+            if (!video.paused && video.currentTime > 0) break;
+            await new Promise(r => setTimeout(r, 80));
+        }
+        return video;
+    }
+
+    async function applyWatchAutomations() {
+        const id = currentWatchVideoId();
+        if (!id) return;
+        if (id === lastWatchVideoId) return;
+        lastWatchVideoId = id;
+
+        const settings = await Storage.getSettings();
+
+        if (settings.autoFullscreen) {
+            const video = await ensureVideoPlaying();
+            const fsBtn = await waitForElement('.ytp-fullscreen-button.ytp-button');
+            if (fsBtn && !document.fullscreenElement) {
+                // After fullscreen, the transition can pause the video — auto-resume.
+                const onFsChange = () => {
+                    setTimeout(() => {
+                        if (video && video.paused) {
+                            video.play().catch(() => {});
+                        }
+                    }, 200);
+                    document.removeEventListener('fullscreenchange', onFsChange);
+                };
+                document.addEventListener('fullscreenchange', onFsChange);
+
+                // Also catch a stray pause within the first 3 seconds and resume once.
+                if (video) {
+                    let resumed = false;
+                    const onPause = () => {
+                        if (resumed) return;
+                        resumed = true;
+                        setTimeout(() => video.play().catch(() => {}), 100);
+                    };
+                    video.addEventListener('pause', onPause, { once: true });
+                    setTimeout(() => video.removeEventListener('pause', onPause), 3000);
+                }
+
+                fsBtn.click();
+            }
+        }
+
+        if (settings.autoOpenComments) {
+            const commentsBtn = await waitForElement('button[aria-label="Comments"]');
+            if (commentsBtn && commentsBtn.getAttribute('aria-pressed') === 'false') {
+                commentsBtn.click();
+            }
+        }
+    }
+
+    // YouTube SPA navigation event
+    document.addEventListener('yt-navigate-finish', () => {
+        applyWatchAutomations();
+    });
+    // Also fire on initial load (event may have already passed)
+    if (document.readyState === 'complete') applyWatchAutomations();
+    else window.addEventListener('load', applyWatchAutomations);
 
     // ── Init ───────────────────────────────────────────────────────────────────
     async function loadStateAndRescan() {
         wlIds = await Storage.getWlIds();
         const settings = await Storage.getSettings();
         hideEnabled = settings.hideEnabled !== false;
+        applyBottomCommentsToggle(settings.hideBottomComments);
+        applyShareToggle(settings.hideShareButton);
+        applyThanksToggle(settings.hideThanksButton);
         rescanAll();
     }
 
