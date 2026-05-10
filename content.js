@@ -301,6 +301,22 @@
         }
     }
 
+    async function reopenCommentsAfterFullscreenExit() {
+        if (document.fullscreenElement) return; // entering, ignore
+        if (!currentWatchVideoId()) return;
+        if (!extensionAlive()) return;
+        const settings = await Storage.getSettings();
+        if (!settings.autoOpenComments) return;
+        // Give YouTube a beat to settle after fullscreen exit
+        await new Promise(r => setTimeout(r, 300));
+        const commentsBtn = document.querySelector('button[aria-label="Comments"]');
+        if (commentsBtn && commentsBtn.getAttribute('aria-pressed') === 'false') {
+            commentsBtn.click();
+        }
+    }
+
+    document.addEventListener('fullscreenchange', reopenCommentsAfterFullscreenExit);
+
     // YouTube SPA navigation event
     document.addEventListener('yt-navigate-finish', () => {
         applyWatchAutomations();
