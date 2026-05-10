@@ -326,14 +326,293 @@
 
     document.addEventListener('fullscreenchange', reopenCommentsAfterFullscreenExit);
 
+    // Hide summary FAB / drawer while a YouTube element is in fullscreen.
+    function applyFullscreenClass() {
+        document.body.classList.toggle('quick-block-fullscreen', !!document.fullscreenElement);
+    }
+    document.addEventListener('fullscreenchange', applyFullscreenClass);
+
+    // ── Summary panel ──────────────────────────────────────────────────────────
+    const SUMMARY_PANEL_ID = 'quick-block-summary-panel';
+    const BRIDGE_URL = 'http://localhost:7777/run';
+
+    // Minimal markdown→HTML for summary output. Escapes HTML first to prevent
+    // injection from transcript content or model output, then applies a small set
+    // of block + inline transforms that cover what Claude typically produces.
+    function mdToHtml(src) {
+        const esc = (s) => s
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        const inline = (s) => esc(s)
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+            .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+        const lines = src.replace(/\r\n/g, '\n').split('\n');
+        const out = [];
+        let inUl = false, inOl = false, inBq = false;
+        const closeLists = () => {
+            if (inUl) { out.push('</ul>'); inUl = false; }
+            if (inOl) { out.push('</ol>'); inOl = false; }
+            if (inBq) { out.push('</blockquote>'); inBq = false; }
+        };
+        for (const raw of lines) {
+            const line = raw.trimEnd();
+            if (!line.trim()) { closeLists(); continue; }
+            if (/^-{3,}$|^\*{3,}$/.test(line.trim())) { closeLists(); out.push('<hr>'); continue; }
+            const h = line.match(/^(#{1,6})\s+(.*)$/);
+            if (h) { closeLists(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue; }
+            const ul = line.match(/^\s*[-*]\s+(.*)$/);
+            if (ul) {
+                if (!inUl) { closeLists(); out.push('<ul>'); inUl = true; }
+                out.push(`<li>${inline(ul[1])}</li>`);
+                continue;
+            }
+            const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+            if (ol) {
+                if (!inOl) { closeLists(); out.push('<ol>'); inOl = true; }
+                out.push(`<li>${inline(ol[1])}</li>`);
+                continue;
+            }
+            const bq = line.match(/^>\s?(.*)$/);
+            if (bq) {
+                if (!inBq) { closeLists(); out.push('<blockquote>'); inBq = true; }
+                out.push(`<p>${inline(bq[1])}</p>`);
+                continue;
+            }
+            closeLists();
+            out.push(`<p>${inline(line)}</p>`);
+        }
+        closeLists();
+        return out.join('\n');
+    }
+
+    function injectSummaryUI() {
+        if (!currentWatchVideoId()) return;
+        if (document.getElementById(SUMMARY_PANEL_ID)) return;
+
+        // Floating action button + slide-in panel — fixed position, body-attached.
+        const root = document.createElement('div');
+        root.id = SUMMARY_PANEL_ID;
+        root.className = 'qb-sum-root';
+        root.innerHTML = `
+            <button class="qb-sum-fab" type="button" title="Summarize this video" aria-label="Summarize">
+                <svg class="qb-sum-fab-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 3v4a1 1 0 001 1h4"/>
+                    <path d="M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/>
+                    <line x1="9" y1="13" x2="15" y2="13"/>
+                    <line x1="9" y1="17" x2="13" y2="17"/>
+                </svg>
+                <svg class="qb-sum-fab-spinner" viewBox="0 0 36 36" aria-hidden="true">
+                    <circle class="qb-sum-fab-spinner-track" cx="18" cy="18" r="15"/>
+                    <circle class="qb-sum-fab-spinner-arc" cx="18" cy="18" r="15"/>
+                </svg>
+            </button>
+            <aside class="qb-sum-drawer" aria-hidden="true">
+                <header class="qb-sum-head">
+                    <strong>Video summary</strong>
+                    <div class="qb-sum-head-actions">
+                        <button class="qb-sum-min" type="button" aria-label="Minimize panel (keeps generation running)" title="Slide closed — keeps generating">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polyline points="9 18 15 12 9 6"/>
+                            </svg>
+                        </button>
+                        <button class="qb-sum-close" type="button" aria-label="Close">✕</button>
+                    </div>
+                </header>
+                <div class="qb-sum-status"></div>
+                <div class="qb-sum-body" hidden></div>
+                <div class="qb-sum-actions" hidden>
+                    <button class="qb-sum-copy" type="button">Copy summary</button>
+                </div>
+            </aside>
+        `;
+        document.body.appendChild(root);
+
+        const drawer = root.querySelector('.qb-sum-drawer');
+        const fab = root.querySelector('.qb-sum-fab');
+        const closeBtn = root.querySelector('.qb-sum-close');
+        const minBtn = root.querySelector('.qb-sum-min');
+        const copyBtn = root.querySelector('.qb-sum-copy');
+
+        // FAB state machine:
+        //   drawer open                 → close it
+        //   generation in flight        → no-op (spinner shows progress; opening waits for completion)
+        //   summary ready, drawer shut  → open drawer to read
+        //   nothing yet                 → kick off generation in background, DON'T open drawer
+        // The drawer never auto-opens — user opens it manually once the spinner stops.
+        fab.addEventListener('click', () => {
+            if (drawer.classList.contains('open')) { closeDrawer(root); return; }
+            if (root.dataset.running) return;
+            if (root.dataset.summarized) { openDrawer(root); return; }
+            runSummarize(root);
+        });
+        minBtn.addEventListener('click', () => closeDrawer(root));
+        closeBtn.addEventListener('click', () => closeDrawer(root));
+        copyBtn.addEventListener('click', () => copySummary(root));
+
+        // ESC closes drawer
+        root.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeDrawer(root);
+        });
+    }
+
+    function openDrawer(root) {
+        const drawer = root.querySelector('.qb-sum-drawer');
+        drawer.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeDrawer(root) {
+        const drawer = root.querySelector('.qb-sum-drawer');
+        drawer.classList.remove('open');
+        drawer.setAttribute('aria-hidden', 'true');
+    }
+
+
+    async function runSummarize(root) {
+        const fab = root.querySelector('.qb-sum-fab');
+        const status = root.querySelector('.qb-sum-status');
+        const body = root.querySelector('.qb-sum-body');
+        const actions = root.querySelector('.qb-sum-actions');
+
+        if (root.dataset.running) return; // already in flight, ignore double-invocation
+        root.dataset.running = '1';
+        fab.classList.add('qb-sum-fab-running');
+        status.textContent = 'Fetching transcript…';
+        body.hidden = false;
+        body.textContent = '';
+        actions.hidden = true;
+
+        const videoId = currentWatchVideoId();
+        if (!videoId) {
+            body.textContent = 'No video ID found on this page.';
+            status.textContent = '';
+            delete root.dataset.running;
+            fab.classList.remove('qb-sum-fab-running');
+            return;
+        }
+
+        let tr;
+        try {
+            const r = await fetch('http://localhost:7777/transcript', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ videoId }),
+            });
+            const data = await r.json();
+            if (data.ok) {
+                tr = {
+                    segments: data.segments,
+                    language: data.language || '',
+                    isAsr: !!data.isAsr,
+                    videoId: data.videoId || videoId,
+                    title: document.querySelector('h1.ytd-watch-metadata yt-formatted-string, h1.title')?.textContent?.trim() || document.title || '',
+                    author: document.querySelector('ytd-channel-name a, #channel-name a')?.textContent?.trim() || '',
+                };
+            } else {
+                body.textContent = `Transcript fetch failed: ${data.reason || 'unknown'}\n${data.message || ''}`;
+                status.textContent = '';
+                delete root.dataset.running;
+            fab.classList.remove('qb-sum-fab-running');
+                return;
+            }
+        } catch (e) {
+            body.textContent = `Bridge unreachable. Start it:\n  node scripts/claude-bridge.mjs\n\n${e.message}`;
+            status.textContent = '';
+            delete root.dataset.running;
+            fab.classList.remove('qb-sum-fab-running');
+            return;
+        }
+
+        const settings = await Storage.getSettings();
+        const model = settings.claudeModel || 'sonnet';
+
+        const transcriptText = tr.segments.map(s => s.text).join(' ');
+
+        const prompt = [
+            `Here is a transcript from a ~20-minute video/podcast. Summarize it with:`,
+            ``,
+            `What it's about (2–3 sentences)`,
+            `Main points covered (in order, as bullets)`,
+            `Key insights, opinions, or recommendations worth remembering`,
+            `Verdict or conclusion (if one is given)`,
+            ``,
+            `Be thorough but concise — I want the full value without watching/listening.`,
+            ``,
+            `Title: ${tr.title}`,
+            ``,
+            `Transcript:`,
+            transcriptText,
+        ].join('\n');
+
+        status.textContent = `Summarizing with ${model}…`;
+
+        try {
+            const t0 = Date.now();
+            const res = await fetch(BRIDGE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt, model }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                body.dataset.raw = data.output;
+                body.innerHTML = mdToHtml(data.output);
+                status.textContent = `${model} · ${Math.round((Date.now() - t0) / 100) / 10}s · ${tr.segments.length} segments`;
+                actions.hidden = false;
+                root.dataset.summarized = '1';
+            } else {
+                body.textContent = `Error: ${data.error}`;
+                status.textContent = '';
+            }
+        } catch (e) {
+            body.textContent = `Bridge unreachable. Start it:\n  node scripts/claude-bridge.mjs`;
+            status.textContent = '';
+        } finally {
+            delete root.dataset.running;
+            fab.classList.remove('qb-sum-fab-running');
+        }
+    }
+
+    async function copySummary(root) {
+        const body = root.querySelector('.qb-sum-body');
+        const text = body.dataset.raw || body.textContent;
+        try {
+            await navigator.clipboard.writeText(text);
+            const btn = root.querySelector('.qb-sum-copy');
+            const orig = btn.textContent;
+            btn.textContent = 'Copied ✓';
+            setTimeout(() => { btn.textContent = orig; }, 1200);
+        } catch {}
+    }
+
+    function removeSummaryUI() {
+        document.getElementById(SUMMARY_PANEL_ID)?.remove();
+    }
+
     // YouTube SPA navigation event
     document.addEventListener('yt-navigate-finish', () => {
         applyOnWatchClass();
         applyWatchAutomations();
+        removeSummaryUI();
+        if (currentWatchVideoId()) {
+            setTimeout(injectSummaryUI, 400);
+        }
     });
     // Also fire on initial load (event may have already passed)
-    if (document.readyState === 'complete') applyWatchAutomations();
-    else window.addEventListener('load', applyWatchAutomations);
+    if (document.readyState === 'complete') {
+        applyWatchAutomations();
+        if (currentWatchVideoId()) injectSummaryUI();
+    } else {
+        window.addEventListener('load', () => {
+            applyWatchAutomations();
+            if (currentWatchVideoId()) injectSummaryUI();
+        });
+    }
 
     // ── Init ───────────────────────────────────────────────────────────────────
     async function loadStateAndRescan() {

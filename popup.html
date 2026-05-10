@@ -87,6 +87,26 @@
             </details>
         </section>
 
+        <section class="claude-test">
+            <details>
+                <summary>Diagnostics</summary>
+                <div class="claude-test-body">
+                    <p class="hint">Run <code>node scripts/claude-bridge.mjs</code> for Claude tests.</p>
+                    <div class="model-row">
+                        <label for="modelSelect">Model</label>
+                        <select id="modelSelect">
+                            <option value="sonnet">Sonnet 4.6</option>
+                            <option value="haiku">Haiku 4.5</option>
+                        </select>
+                    </div>
+                    <button class="btn-primary" id="transcriptTestBtn">Test transcript → clipboard</button>
+                    <button class="btn-primary" id="claudeTestBtn">Test Claude: what's today's date?</button>
+                    <pre id="claudeTestOut" class="claude-out" hidden></pre>
+                    <button class="btn-primary" id="claudeCopyBtn" hidden>Copy output</button>
+                </div>
+            </details>
+        </section>
+
         <section class="import">
             <details>
                 <summary>Import IDs</summary>

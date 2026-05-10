@@ -1,5 +1,6 @@
-// Service worker. Periodic + on-demand WL sync.
+// Service worker. Periodic + on-demand Watch Later sync.
 // Uses chrome.scripting MAIN world to access ytcfg + cookied fetch.
+// (Transcript fetching lives in the local bridge — see scripts/claude-bridge.mjs.)
 
 importScripts('lib/storage.js');
 
@@ -19,7 +20,7 @@ chrome.alarms.onAlarm.addListener(a => {
     if (a.name === SYNC_ALARM) triggerSync();
 });
 
-chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'request-sync') {
         triggerSync().then(sendResponse);
         return true;
@@ -195,6 +196,7 @@ async function fetchAllWatchLaterIds() {
 
     return { ok: true, ids: [...ids], debug };
 }
+
 
 async function triggerSync() {
     try {

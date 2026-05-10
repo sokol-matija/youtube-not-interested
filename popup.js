@@ -46,6 +46,7 @@ async function render() {
     $('#hideShareToggle').checked = !!settings.hideShareButton;
     $('#hideThanksToggle').checked = !!settings.hideThanksButton;
     $('#hideSearchOnWatchToggle').checked = !!settings.hideSearchOnWatch;
+    $('#modelSelect').value = settings.claudeModel || 'sonnet';
 
     const list = $('#recentList');
     list.innerHTML = '';
@@ -160,6 +161,121 @@ $('#importBtn').addEventListener('click', async () => {
     $('#importText').value = '';
     showToast(`Imported ${ids.length} IDs (total ${target.size})`);
     render();
+});
+
+$('#modelSelect').addEventListener('change', async (e) => {
+    await Storage.setSettings({ claudeModel: e.target.value });
+});
+
+$('#transcriptTestBtn').addEventListener('click', async () => {
+    const btn = $('#transcriptTestBtn');
+    const out = $('#claudeTestOut');
+    const copyBtn = $('#claudeCopyBtn');
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = 'Fetching…';
+    out.hidden = false;
+    out.textContent = '…';
+    copyBtn.hidden = true;
+
+    try {
+        const tabs = await chrome.tabs.query({ url: '*://*.youtube.com/watch*', active: true, currentWindow: true });
+        const tab = tabs[0] || (await chrome.tabs.query({ url: '*://*.youtube.com/watch*' }))[0];
+        if (!tab?.url) {
+            out.textContent = 'No YouTube watch tab open.';
+            return;
+        }
+        const videoId = new URL(tab.url).searchParams.get('v');
+        if (!videoId) {
+            out.textContent = 'Could not parse videoId from active tab URL.';
+            return;
+        }
+
+        const r = await fetch('http://localhost:7777/transcript', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ videoId }),
+        });
+        const data = await r.json();
+        if (!data.ok) {
+            out.textContent = `FAILED: ${data.reason || 'unknown'}\n${data.message || ''}`;
+            return;
+        }
+
+        const text = `VideoId: ${videoId}
+Language: ${data.language}${data.isAsr ? ' (auto)' : ''}
+Segments: ${data.segments.length}
+
+${data.segments.map(s => {
+    const sec = Math.floor(s.t / 1000);
+    const m = Math.floor(sec / 60);
+    const ss = String(sec % 60).padStart(2, '0');
+    return `[${m}:${ss}] ${s.text}`;
+}).join('\n')}`;
+
+        out.dataset.raw = text;
+        out.textContent = `OK — ${data.segments.length} segments via bridge (${data.elapsedMs}ms)\n\nFirst 5 lines:\n` +
+            text.split('\n').slice(4, 9).join('\n');
+        copyBtn.hidden = false;
+        copyBtn.textContent = 'Copy full transcript';
+    } catch (e) {
+        out.textContent = `Error: ${e.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = orig;
+    }
+});
+
+$('#claudeTestBtn').addEventListener('click', async () => {
+    const btn = $('#claudeTestBtn');
+    const out = $('#claudeTestOut');
+    const copyBtn = $('#claudeCopyBtn');
+    const model = $('#modelSelect').value;
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = 'Asking…';
+    out.hidden = false;
+    out.textContent = '…';
+    copyBtn.hidden = true;
+    try {
+        const t0 = Date.now();
+        const res = await fetch('http://localhost:7777/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt: "What is today's date? Answer in YYYY-MM-DD only.",
+                model,
+            }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+            out.textContent = `${data.output}\n\n(${model} · ${Math.round((Date.now() - t0) / 100) / 10}s)`;
+            out.dataset.raw = data.output;
+            copyBtn.hidden = false;
+            copyBtn.textContent = 'Copy output';
+        } else {
+            out.textContent = `Error: ${data.error}`;
+        }
+    } catch (e) {
+        out.textContent = `Bridge unreachable. Start it with:\nnode scripts/claude-bridge.mjs\n\n${e.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+    }
+});
+
+$('#claudeCopyBtn').addEventListener('click', async () => {
+    const out = $('#claudeTestOut');
+    const text = out.dataset.raw || out.textContent;
+    try {
+        await navigator.clipboard.writeText(text);
+        const btn = $('#claudeCopyBtn');
+        const orig = btn.textContent;
+        btn.textContent = 'Copied ✓';
+        setTimeout(() => { btn.textContent = orig; }, 1200);
+    } catch {
+        showToast('Copy failed');
+    }
 });
 
 $('#clearBtn').addEventListener('click', async () => {

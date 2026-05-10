@@ -76,3 +76,306 @@ body.quick-block-hide-thanks button[aria-label="Thanks"] {
 body.quick-block-on-watch.quick-block-hide-search-watch ytd-masthead #center {
     display: none !important;
 }
+
+/* Summary FAB + slide-in drawer */
+.qb-sum-root { font-family: "Roboto", "Arial", sans-serif; }
+
+/* Hide the FAB + drawer while any element is in fullscreen */
+body.quick-block-fullscreen .qb-sum-root { display: none !important; }
+
+.qb-sum-fab {
+    position: fixed;
+    top: 80px;
+    right: 16px;
+    z-index: 9999;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: rgba(40, 40, 40, 0.92);
+    color: #f1f1f1;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.qb-sum-fab:hover {
+    background: rgba(60, 60, 60, 0.96);
+    border-color: rgba(255,255,255,0.16);
+    color: #fff;
+}
+.qb-sum-fab-icon { display: block; }
+
+/* Circular progress spinner ring sitting around the FAB while generation is in flight.
+   Two stacked animations (Material indeterminate style):
+     1. SVG rotates around the FAB
+     2. Arc itself rotates inside the SVG (so the dash sweeps, not just travels)
+*/
+.qb-sum-fab-spinner {
+    position: absolute;
+    inset: -7px;
+    width: calc(100% + 14px);
+    height: calc(100% + 14px);
+    opacity: 0;
+    pointer-events: none;
+    transform: rotate(0deg);
+    transition: opacity 0.25s ease;
+}
+.qb-sum-fab-spinner-track {
+    fill: none;
+    stroke: rgba(255,255,255,0.10);
+    stroke-width: 2.2;
+}
+.qb-sum-fab-spinner-arc {
+    fill: none;
+    stroke: #6db4ff;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-dasharray: 28 100;
+    transform-origin: center;
+}
+.qb-sum-fab-running .qb-sum-fab-spinner {
+    opacity: 1;
+    animation: qb-sum-spin 1.4s linear infinite;
+}
+.qb-sum-fab-running .qb-sum-fab-spinner-arc {
+    animation: qb-sum-arc 1.4s ease-in-out infinite;
+}
+@keyframes qb-sum-spin {
+    to { transform: rotate(360deg); }
+}
+@keyframes qb-sum-arc {
+    0%   { stroke-dasharray: 5 100; transform: rotate(0deg); }
+    50%  { stroke-dasharray: 60 100; transform: rotate(135deg); }
+    100% { stroke-dasharray: 5 100; transform: rotate(360deg); }
+}
+
+@media (prefers-color-scheme: light) {
+    .qb-sum-fab {
+        background: rgba(255,255,255,0.95);
+        color: #0f0f0f;
+        border-color: rgba(0,0,0,0.1);
+    }
+    .qb-sum-fab:hover {
+        background: #fff;
+        border-color: rgba(0,0,0,0.18);
+    }
+    .qb-sum-fab-spinner-track { stroke: rgba(0,0,0,0.10); }
+    .qb-sum-fab-spinner-arc { stroke: #1a73e8; }
+}
+
+.qb-sum-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 720px;
+    max-width: 95vw;
+    height: 100vh;
+    background: #181818;
+    color: #f1f1f1;
+    border-left: 1px solid rgba(255,255,255,0.08);
+    box-shadow: -8px 0 32px rgba(0,0,0,0.5);
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 24px;
+    box-sizing: border-box;
+    transform: translateX(110%);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    overflow: hidden;
+}
+.qb-sum-drawer.open { transform: translateX(0); }
+
+.qb-sum-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+}
+.qb-sum-head strong {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+.qb-sum-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.qb-sum-close,
+.qb-sum-min {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.qb-sum-close:hover,
+.qb-sum-min:hover {
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+}
+.qb-sum-min svg { display: block; }
+
+.qb-sum-status {
+    font-size: 13px;
+    color: #909090;
+    min-height: 18px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+}
+
+.qb-sum-body {
+    font-size: 16.5px;
+    line-height: 1.7;
+    padding: 24px 28px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    color: #e8e8e8;
+    overflow-y: auto;
+    flex: 1;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: 0.1px;
+    word-break: break-word;
+}
+/* Subtle scrollbar */
+.qb-sum-body::-webkit-scrollbar { width: 8px; }
+.qb-sum-body::-webkit-scrollbar-track { background: transparent; }
+.qb-sum-body::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.12);
+    border-radius: 4px;
+}
+.qb-sum-body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+.qb-sum-body > *:first-child { margin-top: 0; }
+.qb-sum-body > *:last-child { margin-bottom: 0; }
+
+.qb-sum-body p { margin: 0 0 14px; }
+
+.qb-sum-body h1, .qb-sum-body h2, .qb-sum-body h3,
+.qb-sum-body h4, .qb-sum-body h5, .qb-sum-body h6 {
+    margin: 22px 0 10px;
+    line-height: 1.35;
+    color: #ffffff;
+    font-weight: 600;
+    letter-spacing: 0.1px;
+}
+.qb-sum-body h1 { font-size: 22px; }
+.qb-sum-body h2 { font-size: 19px; }
+.qb-sum-body h3 { font-size: 17px; }
+.qb-sum-body h4, .qb-sum-body h5, .qb-sum-body h6 { font-size: 16px; }
+
+.qb-sum-body ul, .qb-sum-body ol {
+    margin: 0 0 14px;
+    padding-left: 24px;
+}
+.qb-sum-body li {
+    margin: 8px 0;
+    padding-left: 4px;
+}
+.qb-sum-body li::marker { color: rgba(255,255,255,0.4); }
+.qb-sum-body li > p { margin: 0 0 6px; }
+.qb-sum-body li > ul, .qb-sum-body li > ol { margin-top: 6px; }
+
+.qb-sum-body strong {
+    color: #ffffff;
+    font-weight: 700;
+}
+.qb-sum-body em { color: #f0f0f0; font-style: italic; }
+
+.qb-sum-body code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 14.5px;
+    background: rgba(255,255,255,0.08);
+    padding: 2px 6px;
+    border-radius: 5px;
+    color: #f5d57a;
+}
+.qb-sum-body blockquote {
+    margin: 14px 0;
+    padding: 10px 16px;
+    border-left: 3px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.03);
+    border-radius: 0 6px 6px 0;
+    color: #d4d4d4;
+    font-style: italic;
+}
+.qb-sum-body blockquote p:last-child { margin-bottom: 0; }
+.qb-sum-body hr {
+    border: 0;
+    border-top: 1px solid rgba(255,255,255,0.12);
+    margin: 18px 0;
+}
+.qb-sum-body a {
+    color: #6db4ff;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.qb-sum-actions {
+    margin-top: 14px;
+    flex-shrink: 0;
+}
+.qb-sum-copy {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border: none;
+    border-radius: 18px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.qb-sum-copy:hover { background: rgba(255,255,255,0.18); }
+
+@media (prefers-color-scheme: light) {
+    .qb-sum-drawer {
+        background: #fff;
+        color: #0f0f0f;
+        border-left-color: rgba(0,0,0,0.08);
+    }
+    .qb-sum-head strong { color: #0f0f0f; }
+    .qb-sum-close { color: #606060; }
+    .qb-sum-close:hover { background: rgba(0,0,0,0.06); color: #0f0f0f; }
+    .qb-sum-status { color: #606060; }
+    .qb-sum-body {
+        background: rgba(0,0,0,0.04);
+        border-color: rgba(0,0,0,0.08);
+        color: #0f0f0f;
+    }
+    .qb-sum-body h1, .qb-sum-body h2, .qb-sum-body h3,
+    .qb-sum-body h4, .qb-sum-body h5, .qb-sum-body h6 { color: #000; }
+    .qb-sum-body strong { color: #000; }
+    .qb-sum-body em { color: #1a1a1a; }
+    .qb-sum-body blockquote {
+        background: rgba(0,0,0,0.03);
+        border-left-color: rgba(0,0,0,0.25);
+        color: #404040;
+    }
+    .qb-sum-body code {
+        background: rgba(0,0,0,0.06);
+        color: #8a5a00;
+    }
+    .qb-sum-body hr { border-top-color: rgba(0,0,0,0.12); }
+    .qb-sum-copy {
+        background: rgba(0,0,0,0.06);
+        color: #0f0f0f;
+    }
+    .qb-sum-copy:hover { background: rgba(0,0,0,0.1); }
+}
+
+/* Drawer adapts on narrower windows */
+@media (max-width: 900px) {
+    .qb-sum-drawer { width: 100vw; max-width: 100vw; padding: 16px 18px; }
+    .qb-sum-body { font-size: 15px; padding: 18px 20px; }
+}
