@@ -37,3 +37,16 @@ yt-thumbnail-view-model {
     overflow: visible !important;
     position: relative !important;
 }
+
+/* Hide menu flicker during Not Interested click */
+body.quick-block-suppress-menu tp-yt-iron-dropdown,
+body.quick-block-suppress-menu ytd-menu-popup-renderer,
+body.quick-block-suppress-menu ytd-popup-container {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Hide ysm-tags */
+.ysm-tags {
+    display: none !important;
+}
