@@ -212,12 +212,22 @@ async function triggerSync() {
         }
 
         const Storage = self.QuickBlockStorage;
-        await Storage.setWlIds(new Set(result.ids));
+        // Merge with existing — never destroy IDs we already know about.
+        // Removals are caught by content-script click capture in real time.
+        const existing = await Storage.getWlIds();
+        const merged = new Set([...existing, ...result.ids]);
+        await Storage.setWlIds(merged);
         await Storage.setLastSync(Date.now());
 
         chrome.tabs.sendMessage(tab.id, { type: 'rescan' }).catch(() => {});
 
-        return { ok: true, count: result.ids.length, debug: result.debug };
+        return {
+            ok: true,
+            count: merged.size,
+            fetched: result.ids.length,
+            added: merged.size - existing.size,
+            debug: result.debug,
+        };
     } catch (e) {
         console.warn('[Quick Block] sync failed:', e);
         return { ok: false, reason: String(e?.message || e) };
