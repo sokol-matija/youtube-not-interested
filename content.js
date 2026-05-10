@@ -424,10 +424,10 @@
                     </div>
                 </header>
                 <div class="qb-sum-status"></div>
-                <div class="qb-sum-body" hidden></div>
                 <div class="qb-sum-actions" hidden>
                     <button class="qb-sum-copy" type="button">Copy summary</button>
                 </div>
+                <div class="qb-sum-body" hidden></div>
             </aside>
         `;
         document.body.appendChild(root);
@@ -453,6 +453,13 @@
         minBtn.addEventListener('click', () => closeDrawer(root));
         closeBtn.addEventListener('click', () => closeDrawer(root));
         copyBtn.addEventListener('click', () => copySummary(root));
+
+        // Click anywhere outside the FAB + drawer to dismiss. Generation keeps running.
+        document.addEventListener('mousedown', (e) => {
+            if (!drawer.classList.contains('open')) return;
+            if (root.contains(e.target)) return;
+            closeDrawer(root);
+        });
 
         // ESC closes drawer
         root.addEventListener('keydown', (e) => {

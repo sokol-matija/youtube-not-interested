@@ -85,7 +85,7 @@ body.quick-block-fullscreen .qb-sum-root { display: none !important; }
 
 .qb-sum-fab {
     position: fixed;
-    top: 80px;
+    top: 12px;
     right: 16px;
     z-index: 9999;
     display: inline-flex;
@@ -322,7 +322,7 @@ body.quick-block-fullscreen .qb-sum-root { display: none !important; }
 }
 
 .qb-sum-actions {
-    margin-top: 14px;
+    margin-bottom: 12px;
     flex-shrink: 0;
 }
 .qb-sum-copy {
