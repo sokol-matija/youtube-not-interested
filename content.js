@@ -190,6 +190,14 @@
         document.body.classList.toggle('quick-block-hide-thanks', !!on);
     }
 
+    function applySearchOnWatchToggle(on) {
+        document.body.classList.toggle('quick-block-hide-search-watch', !!on);
+    }
+
+    function applyOnWatchClass() {
+        document.body.classList.toggle('quick-block-on-watch', !!currentWatchVideoId());
+    }
+
     // ── React to storage changes (popup toggles, click capture, etc.) ─────────
     chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') return;
@@ -206,6 +214,7 @@
             applyBottomCommentsToggle(newSettings.hideBottomComments);
             applyShareToggle(newSettings.hideShareButton);
             applyThanksToggle(newSettings.hideThanksButton);
+            applySearchOnWatchToggle(newSettings.hideSearchOnWatch);
         }
     });
 
@@ -319,6 +328,7 @@
 
     // YouTube SPA navigation event
     document.addEventListener('yt-navigate-finish', () => {
+        applyOnWatchClass();
         applyWatchAutomations();
     });
     // Also fire on initial load (event may have already passed)
@@ -333,6 +343,8 @@
         applyBottomCommentsToggle(settings.hideBottomComments);
         applyShareToggle(settings.hideShareButton);
         applyThanksToggle(settings.hideThanksButton);
+        applySearchOnWatchToggle(settings.hideSearchOnWatch);
+        applyOnWatchClass();
         rescanAll();
     }
 

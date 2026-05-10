@@ -45,6 +45,7 @@ async function render() {
     $('#hideBottomCommentsToggle').checked = !!settings.hideBottomComments;
     $('#hideShareToggle').checked = !!settings.hideShareButton;
     $('#hideThanksToggle').checked = !!settings.hideThanksButton;
+    $('#hideSearchOnWatchToggle').checked = !!settings.hideSearchOnWatch;
 
     const list = $('#recentList');
     list.innerHTML = '';
@@ -105,6 +106,10 @@ $('#hideShareToggle').addEventListener('change', async (e) => {
 
 $('#hideThanksToggle').addEventListener('change', async (e) => {
     await Storage.setSettings({ hideThanksButton: e.target.checked });
+});
+
+$('#hideSearchOnWatchToggle').addEventListener('change', async (e) => {
+    await Storage.setSettings({ hideSearchOnWatch: e.target.checked });
 });
 
 $('#syncBtn').addEventListener('click', async () => {

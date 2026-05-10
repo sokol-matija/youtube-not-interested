@@ -71,3 +71,8 @@ body.quick-block-hide-share button[aria-label="Share"] {
 body.quick-block-hide-thanks button[aria-label="Thanks"] {
     display: none !important;
 }
+
+/* Hide search bar on /watch pages */
+body.quick-block-on-watch.quick-block-hide-search-watch ytd-masthead #center {
+    display: none !important;
+}
