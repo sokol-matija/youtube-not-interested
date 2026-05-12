@@ -409,10 +409,40 @@
     function getSummaryDrawer() { return getSummaryRoot()?.querySelector('.qb-sum-drawer'); }
 
     function injectSummaryUI() {
-        if (!currentWatchVideoId()) return;
-        summaryState.videoId = currentWatchVideoId();
+        const vid = currentWatchVideoId();
+        if (!vid) return;
+        summaryState.videoId = vid;
         injectSummaryDrawer();
         injectSummaryFab();
+        restoreCachedSummary(vid);
+    }
+
+    async function restoreCachedSummary(videoId) {
+        let entry;
+        try { entry = await Storage.getSummary(videoId); } catch { return; }
+        if (!entry) return;
+        // Stale-check: if user navigated to a different video while we waited,
+        // don't paint the previous video's summary.
+        if (summaryState.videoId !== videoId) return;
+
+        summaryState.outputRaw = entry.raw || '';
+        summaryState.outputHtml = entry.html || '';
+        summaryState.statusText = entry.statusText || '';
+        summaryState.summarized = true;
+
+        const drawer = getSummaryDrawer();
+        const body = drawer?.querySelector('.qb-sum-body');
+        const status = drawer?.querySelector('.qb-sum-status');
+        const actions = drawer?.querySelector('.qb-sum-actions');
+        if (body && summaryState.outputHtml) {
+            body.dataset.raw = summaryState.outputRaw;
+            body.innerHTML = summaryState.outputHtml;
+            body.hidden = false;
+        }
+        if (status) status.textContent = summaryState.statusText;
+        if (actions) actions.hidden = false;
+
+        getSummaryFab()?.classList.add('qb-sum-fab-ready');
     }
 
     function injectSummaryDrawer() {
@@ -650,6 +680,20 @@
                 }
                 if (liveStatus) liveStatus.textContent = summaryState.statusText;
                 if (liveActions) liveActions.hidden = false;
+
+                // Persist to cache so a page refresh restores this summary
+                // without re-running generation. videoId may have changed mid-flight
+                // (SPA nav) — write under the id we kicked off with.
+                try {
+                    await Storage.setSummary(videoId, {
+                        raw: summaryState.outputRaw,
+                        html: summaryState.outputHtml,
+                        statusText: summaryState.statusText,
+                        ts: Date.now(),
+                        model,
+                        title: tr.title || '',
+                    });
+                } catch {}
 
                 // Toast + green ready badge on FAB only when drawer is closed.
                 if (!getSummaryDrawer()?.classList.contains('open')) {
