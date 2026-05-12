@@ -1,12 +1,54 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ff4d4d"/>
-      <stop offset="100%" stop-color="#cc0000"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0a0a1a"/>
     </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7fc8ff"/>
+      <stop offset="50%" stop-color="#3ea6ff"/>
+      <stop offset="100%" stop-color="#1a73e8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3ea6ff" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#3ea6ff" stop-opacity="0"/>
+    </radialGradient>
   </defs>
+
+  <!-- background -->
   <circle cx="64" cy="64" r="60" fill="url(#bg)"/>
-  <path d="M40 40 L88 88 M88 40 L40 88"
-        stroke="white" stroke-width="12"
-        stroke-linecap="round" fill="none"/>
+  <circle cx="64" cy="64" r="60" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+
+  <!-- soft glow behind sparkle -->
+  <circle cx="64" cy="64" r="42" fill="url(#glow)"/>
+
+  <!-- main 4-point sparkle, centered, radius ~44 -->
+  <path d="M64 18
+           C 68 52, 76 60, 110 64
+           C 76 68, 68 76, 64 110
+           C 60 76, 52 68, 18 64
+           C 52 60, 60 52, 64 18 Z"
+        fill="url(#spark)"/>
+
+  <!-- highlight on top arm -->
+  <path d="M64 18
+           C 66 52, 70 58, 82 62
+           C 70 60, 66 54, 64 30 Z"
+        fill="white" opacity="0.45"/>
+
+  <!-- small secondary sparkle, top-right -->
+  <path d="M98 32
+           C 99 41, 102 44, 110 45
+           C 102 46, 99 49, 98 58
+           C 97 49, 94 46, 86 45
+           C 94 44, 97 41, 98 32 Z"
+        fill="#7fc8ff" opacity="0.85"/>
+
+  <!-- tiny third sparkle, bottom-left -->
+  <path d="M30 92
+           C 31 97, 33 99, 38 100
+           C 33 101, 31 103, 30 108
+           C 29 103, 27 101, 22 100
+           C 27 99, 29 97, 30 92 Z"
+        fill="#7fc8ff" opacity="0.7"/>
 </svg>
