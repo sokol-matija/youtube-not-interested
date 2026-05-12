@@ -165,6 +165,47 @@ body {
 .btn-primary:hover { filter: brightness(1.08); }
 .btn-primary:disabled { opacity: 0.6; cursor: wait; }
 
+/* Bridge health row */
+.health {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.health-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.health-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-mute);
+    box-shadow: none;
+    transition: background 0.2s, box-shadow 0.2s;
+}
+.health-dot.ok {
+    background: #2ecc71;
+    box-shadow: 0 0 6px rgba(46, 204, 113, 0.6);
+}
+.health-dot.fail {
+    background: var(--danger);
+    box-shadow: 0 0 6px rgba(255, 85, 85, 0.6);
+}
+.health-label {
+    font-weight: 500;
+}
+.health-status {
+    font-size: 11px;
+    color: var(--text-mute);
+    font-variant-numeric: tabular-nums;
+}
+
 /* Recent */
 .recent details {
     background: var(--surface);

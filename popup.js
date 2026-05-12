@@ -285,6 +285,35 @@ $('#clearBtn').addEventListener('click', async () => {
     render();
 });
 
+async function pingBridge() {
+    const dot = $('#healthDot');
+    const status = $('#healthStatus');
+    if (!dot || !status) return;
+    dot.classList.remove('ok', 'fail');
+    status.textContent = 'checking…';
+    const t0 = Date.now();
+    try {
+        const ctrl = new AbortController();
+        const timeout = setTimeout(() => ctrl.abort(), 1500);
+        const res = await fetch('http://localhost:7777/health', { signal: ctrl.signal });
+        clearTimeout(timeout);
+        const ms = Date.now() - t0;
+        if (res.ok) {
+            const data = await res.json().catch(() => ({}));
+            dot.classList.add('ok');
+            const model = data.defaultModel ? ` · ${data.defaultModel}` : '';
+            status.textContent = `online · ${ms}ms${model}`;
+        } else {
+            dot.classList.add('fail');
+            status.textContent = `HTTP ${res.status}`;
+        }
+    } catch (e) {
+        dot.classList.add('fail');
+        status.textContent = e.name === 'AbortError' ? 'timeout' : 'offline';
+    }
+}
+
 chrome.storage.onChanged.addListener(() => render());
 
 render();
+pingBridge();

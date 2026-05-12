@@ -41,7 +41,7 @@ function corsHeaders(origin) {
     return {
         'Access-Control-Allow-Origin': origin || '*',
         'Vary': 'Origin',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Max-Age': '86400',
     };
@@ -142,6 +142,16 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
         res.writeHead(204, headers);
         return res.end();
+    }
+    // Lightweight health probe for popup status row.
+    if (req.method === 'GET' && req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json', ...headers });
+        return res.end(JSON.stringify({
+            ok: true,
+            port: PORT,
+            defaultModel: DEFAULT_MODEL,
+            pythonPath: YTT_PYTHON,
+        }));
     }
     if (req.method === 'POST' && req.url === '/transcript') {
         try {
