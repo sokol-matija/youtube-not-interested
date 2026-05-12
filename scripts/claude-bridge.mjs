@@ -15,7 +15,10 @@ const DEFAULT_MODEL = process.env.CLAUDE_MODEL || 'haiku';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const YTT_PYTHON = process.env.YTT_PYTHON || path.join(__dirname, '.venv', 'bin', 'python');
+const VENV_PY = process.platform === 'win32'
+    ? path.join(__dirname, '.venv', 'Scripts', 'python.exe')
+    : path.join(__dirname, '.venv', 'bin', 'python');
+const YTT_PYTHON = process.env.YTT_PYTHON || VENV_PY;
 // Hard cap to avoid runaway invocations
 const MAX_INPUT_CHARS = 200_000;
 
