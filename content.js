@@ -334,7 +334,21 @@
 
     // ── Summary panel ──────────────────────────────────────────────────────────
     const SUMMARY_PANEL_ID = 'quick-block-summary-panel';
+    const SUMMARY_FAB_ID = 'quick-block-summary-fab';
+    const SUMMARY_TOAST_ID = 'quick-block-summary-toast';
     const BRIDGE_URL = 'http://localhost:7777/run';
+
+    // Shared state so the masthead-mounted FAB and body-mounted drawer stay in sync
+    // even though they live in different DOM subtrees.
+    const summaryState = {
+        videoId: null,
+        running: false,
+        summarized: false,
+        outputRaw: '',
+        outputHtml: '',
+        statusText: '',
+        toastTimer: null,
+    };
 
     // Minimal markdown→HTML for summary output. Escapes HTML first to prevent
     // injection from transcript content or model output, then applies a small set
@@ -390,27 +404,24 @@
         return out.join('\n');
     }
 
+    function getSummaryFab() { return document.getElementById(SUMMARY_FAB_ID); }
+    function getSummaryRoot() { return document.getElementById(SUMMARY_PANEL_ID); }
+    function getSummaryDrawer() { return getSummaryRoot()?.querySelector('.qb-sum-drawer'); }
+
     function injectSummaryUI() {
         if (!currentWatchVideoId()) return;
-        if (document.getElementById(SUMMARY_PANEL_ID)) return;
+        summaryState.videoId = currentWatchVideoId();
+        injectSummaryDrawer();
+        injectSummaryFab();
+    }
 
-        // Floating action button + slide-in panel — fixed position, body-attached.
+    function injectSummaryDrawer() {
+        if (getSummaryRoot()) return;
+
         const root = document.createElement('div');
         root.id = SUMMARY_PANEL_ID;
         root.className = 'qb-sum-root';
         root.innerHTML = `
-            <button class="qb-sum-fab" type="button" title="Summarize this video" aria-label="Summarize">
-                <svg class="qb-sum-fab-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M14 3v4a1 1 0 001 1h4"/>
-                    <path d="M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/>
-                    <line x1="9" y1="13" x2="15" y2="13"/>
-                    <line x1="9" y1="17" x2="13" y2="17"/>
-                </svg>
-                <svg class="qb-sum-fab-spinner" viewBox="0 0 36 36" aria-hidden="true">
-                    <circle class="qb-sum-fab-spinner-track" cx="18" cy="18" r="15"/>
-                    <circle class="qb-sum-fab-spinner-arc" cx="18" cy="18" r="15"/>
-                </svg>
-            </button>
             <aside class="qb-sum-drawer" aria-hidden="true">
                 <header class="qb-sum-head">
                     <strong>Video summary</strong>
@@ -432,74 +443,128 @@
         `;
         document.body.appendChild(root);
 
-        const drawer = root.querySelector('.qb-sum-drawer');
-        const fab = root.querySelector('.qb-sum-fab');
-        const closeBtn = root.querySelector('.qb-sum-close');
-        const minBtn = root.querySelector('.qb-sum-min');
-        const copyBtn = root.querySelector('.qb-sum-copy');
+        root.querySelector('.qb-sum-min').addEventListener('click', closeDrawer);
+        root.querySelector('.qb-sum-close').addEventListener('click', closeDrawer);
+        root.querySelector('.qb-sum-copy').addEventListener('click', copySummary);
+
+        // Click anywhere outside the drawer + FAB + toast dismisses. Generation keeps running.
+        document.addEventListener('mousedown', (e) => {
+            const drawer = getSummaryDrawer();
+            if (!drawer?.classList.contains('open')) return;
+            if (root.contains(e.target)) return;
+            if (getSummaryFab()?.contains(e.target)) return;
+            const toast = document.getElementById(SUMMARY_TOAST_ID);
+            if (toast?.contains(e.target)) return;
+            closeDrawer();
+        });
+
+        root.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeDrawer();
+        });
+    }
+
+    function injectSummaryFab() {
+        if (getSummaryFab()) return;
+
+        // Find the YouTube top-right buttons container in the masthead.
+        const end = document.querySelector('ytd-masthead #end')
+            || document.querySelector('ytd-masthead #buttons')
+            || document.querySelector('#masthead-container #end');
+        if (!end) {
+            setTimeout(injectSummaryFab, 300);
+            return;
+        }
+
+        const fab = document.createElement('button');
+        fab.id = SUMMARY_FAB_ID;
+        fab.type = 'button';
+        fab.className = 'qb-sum-fab qb-sum-fab-masthead';
+        fab.title = 'Summarize this video';
+        fab.setAttribute('aria-label', 'Summarize');
+        fab.innerHTML = `
+            <svg class="qb-sum-fab-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 3v4a1 1 0 001 1h4"/>
+                <path d="M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/>
+                <line x1="9" y1="13" x2="15" y2="13"/>
+                <line x1="9" y1="17" x2="13" y2="17"/>
+            </svg>
+            <svg class="qb-sum-fab-spinner" viewBox="0 0 36 36" aria-hidden="true">
+                <circle class="qb-sum-fab-spinner-track" cx="18" cy="18" r="15"/>
+                <circle class="qb-sum-fab-spinner-arc" cx="18" cy="18" r="15"/>
+            </svg>
+        `;
+
+        // Place FAB immediately before the avatar button so it sits right next to it.
+        // Fall back to start of #end if the avatar isn't found yet.
+        const avatar = end.querySelector('#avatar-btn')
+            || end.querySelector('ytd-topbar-menu-button-renderer:last-of-type')
+            || end.querySelector('yt-img-shadow');
+        const anchor = avatar?.closest('ytd-topbar-menu-button-renderer, yt-button-shape, #avatar-btn') || avatar;
+        if (anchor && anchor.parentElement === end) {
+            end.insertBefore(fab, anchor);
+        } else {
+            end.insertBefore(fab, end.firstChild);
+        }
 
         // FAB state machine:
         //   drawer open                 → close it
-        //   generation in flight        → no-op (spinner shows progress; opening waits for completion)
+        //   generation in flight        → no-op (spinner shows progress)
         //   summary ready, drawer shut  → open drawer to read
-        //   nothing yet                 → kick off generation in background, DON'T open drawer
-        // The drawer never auto-opens — user opens it manually once the spinner stops.
+        //   nothing yet                 → kick off generation in background
         fab.addEventListener('click', () => {
-            if (drawer.classList.contains('open')) { closeDrawer(root); return; }
-            if (root.dataset.running) return;
-            if (root.dataset.summarized) { openDrawer(root); return; }
-            runSummarize(root);
-        });
-        minBtn.addEventListener('click', () => closeDrawer(root));
-        closeBtn.addEventListener('click', () => closeDrawer(root));
-        copyBtn.addEventListener('click', () => copySummary(root));
-
-        // Click anywhere outside the FAB + drawer to dismiss. Generation keeps running.
-        document.addEventListener('mousedown', (e) => {
-            if (!drawer.classList.contains('open')) return;
-            if (root.contains(e.target)) return;
-            closeDrawer(root);
+            const drawer = getSummaryDrawer();
+            if (drawer?.classList.contains('open')) { closeDrawer(); return; }
+            if (summaryState.running) return;
+            if (summaryState.summarized) { openDrawer(); return; }
+            runSummarize();
         });
 
-        // ESC closes drawer
-        root.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeDrawer(root);
-        });
+        if (summaryState.running) fab.classList.add('qb-sum-fab-running');
     }
 
-    function openDrawer(root) {
-        const drawer = root.querySelector('.qb-sum-drawer');
+    function openDrawer() {
+        const drawer = getSummaryDrawer();
+        if (!drawer) return;
         drawer.classList.add('open');
         drawer.setAttribute('aria-hidden', 'false');
+        dismissSummaryToast();
+        // Green ready-badge stays on the FAB after open — it only clears on SPA nav
+        // (via removeSummaryUI). User wanted a persistent "summary exists" indicator.
     }
 
-    function closeDrawer(root) {
-        const drawer = root.querySelector('.qb-sum-drawer');
+    function closeDrawer() {
+        const drawer = getSummaryDrawer();
+        if (!drawer) return;
         drawer.classList.remove('open');
         drawer.setAttribute('aria-hidden', 'true');
     }
 
+    async function runSummarize() {
+        if (summaryState.running) return;
+        summaryState.running = true;
+        summaryState.summarized = false;
+        summaryState.outputRaw = '';
+        summaryState.outputHtml = '';
+        summaryState.statusText = 'Fetching transcript…';
 
-    async function runSummarize(root) {
-        const fab = root.querySelector('.qb-sum-fab');
-        const status = root.querySelector('.qb-sum-status');
-        const body = root.querySelector('.qb-sum-body');
-        const actions = root.querySelector('.qb-sum-actions');
+        getSummaryFab()?.classList.add('qb-sum-fab-running');
 
-        if (root.dataset.running) return; // already in flight, ignore double-invocation
-        root.dataset.running = '1';
-        fab.classList.add('qb-sum-fab-running');
-        status.textContent = 'Fetching transcript…';
-        body.hidden = false;
-        body.textContent = '';
-        actions.hidden = true;
+        const drawer = getSummaryDrawer();
+        const status = drawer?.querySelector('.qb-sum-status');
+        const body = drawer?.querySelector('.qb-sum-body');
+        const actions = drawer?.querySelector('.qb-sum-actions');
+        if (status) status.textContent = summaryState.statusText;
+        if (body) { body.hidden = false; body.textContent = ''; }
+        if (actions) actions.hidden = true;
 
         const videoId = currentWatchVideoId();
         if (!videoId) {
-            body.textContent = 'No video ID found on this page.';
-            status.textContent = '';
-            delete root.dataset.running;
-            fab.classList.remove('qb-sum-fab-running');
+            const msg = 'No video ID found on this page.';
+            if (body) body.textContent = msg;
+            summaryState.statusText = '';
+            if (status) status.textContent = '';
+            summaryState.running = false;
+            getSummaryFab()?.classList.remove('qb-sum-fab-running');
             return;
         }
 
@@ -521,17 +586,19 @@
                     author: document.querySelector('ytd-channel-name a, #channel-name a')?.textContent?.trim() || '',
                 };
             } else {
-                body.textContent = `Transcript fetch failed: ${data.reason || 'unknown'}\n${data.message || ''}`;
-                status.textContent = '';
-                delete root.dataset.running;
-            fab.classList.remove('qb-sum-fab-running');
+                if (body) body.textContent = `Transcript fetch failed: ${data.reason || 'unknown'}\n${data.message || ''}`;
+                summaryState.statusText = '';
+                if (status) status.textContent = '';
+                summaryState.running = false;
+                getSummaryFab()?.classList.remove('qb-sum-fab-running');
                 return;
             }
         } catch (e) {
-            body.textContent = `Bridge unreachable. Start it:\n  node scripts/claude-bridge.mjs\n\n${e.message}`;
-            status.textContent = '';
-            delete root.dataset.running;
-            fab.classList.remove('qb-sum-fab-running');
+            if (body) body.textContent = `Bridge unreachable. Start it:\n  node scripts/claude-bridge.mjs\n\n${e.message}`;
+            summaryState.statusText = '';
+            if (status) status.textContent = '';
+            summaryState.running = false;
+            getSummaryFab()?.classList.remove('qb-sum-fab-running');
             return;
         }
 
@@ -556,7 +623,8 @@
             transcriptText,
         ].join('\n');
 
-        status.textContent = `Summarizing with ${model}…`;
+        summaryState.statusText = `Summarizing with ${model}…`;
+        if (status) status.textContent = summaryState.statusText;
 
         try {
             const t0 = Date.now();
@@ -567,38 +635,100 @@
             });
             const data = await res.json();
             if (data.ok) {
-                body.dataset.raw = data.output;
-                body.innerHTML = mdToHtml(data.output);
-                status.textContent = `${model} · ${Math.round((Date.now() - t0) / 100) / 10}s · ${tr.segments.length} segments`;
-                actions.hidden = false;
-                root.dataset.summarized = '1';
+                summaryState.outputRaw = data.output;
+                summaryState.outputHtml = mdToHtml(data.output);
+                summaryState.statusText = `${model} · ${Math.round((Date.now() - t0) / 100) / 10}s · ${tr.segments.length} segments`;
+                summaryState.summarized = true;
+
+                const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
+                const liveStatus = getSummaryDrawer()?.querySelector('.qb-sum-status');
+                const liveActions = getSummaryDrawer()?.querySelector('.qb-sum-actions');
+                if (liveBody) {
+                    liveBody.dataset.raw = summaryState.outputRaw;
+                    liveBody.innerHTML = summaryState.outputHtml;
+                    liveBody.hidden = false;
+                }
+                if (liveStatus) liveStatus.textContent = summaryState.statusText;
+                if (liveActions) liveActions.hidden = false;
+
+                // Toast + green ready badge on FAB only when drawer is closed.
+                if (!getSummaryDrawer()?.classList.contains('open')) {
+                    const label = tr.title ? `Summary ready · ${tr.title}` : 'Summary ready';
+                    showSummaryToast(label);
+                    getSummaryFab()?.classList.add('qb-sum-fab-ready');
+                }
             } else {
-                body.textContent = `Error: ${data.error}`;
-                status.textContent = '';
+                const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
+                const liveStatus = getSummaryDrawer()?.querySelector('.qb-sum-status');
+                if (liveBody) liveBody.textContent = `Error: ${data.error}`;
+                summaryState.statusText = '';
+                if (liveStatus) liveStatus.textContent = '';
             }
         } catch (e) {
-            body.textContent = `Bridge unreachable. Start it:\n  node scripts/claude-bridge.mjs`;
-            status.textContent = '';
+            const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
+            const liveStatus = getSummaryDrawer()?.querySelector('.qb-sum-status');
+            if (liveBody) liveBody.textContent = `Bridge unreachable. Start it:\n  node scripts/claude-bridge.mjs`;
+            summaryState.statusText = '';
+            if (liveStatus) liveStatus.textContent = '';
         } finally {
-            delete root.dataset.running;
-            fab.classList.remove('qb-sum-fab-running');
+            summaryState.running = false;
+            getSummaryFab()?.classList.remove('qb-sum-fab-running');
         }
     }
 
-    async function copySummary(root) {
-        const body = root.querySelector('.qb-sum-body');
-        const text = body.dataset.raw || body.textContent;
+    async function copySummary() {
+        const text = summaryState.outputRaw;
+        if (!text) return;
         try {
             await navigator.clipboard.writeText(text);
-            const btn = root.querySelector('.qb-sum-copy');
+            const btn = getSummaryDrawer()?.querySelector('.qb-sum-copy');
+            if (!btn) return;
             const orig = btn.textContent;
             btn.textContent = 'Copied ✓';
             setTimeout(() => { btn.textContent = orig; }, 1200);
         } catch {}
     }
 
+    function showSummaryToast(label) {
+        dismissSummaryToast();
+        const toast = document.createElement('div');
+        toast.id = SUMMARY_TOAST_ID;
+        toast.className = 'qb-sum-toast';
+        toast.setAttribute('role', 'button');
+        toast.tabIndex = 0;
+        toast.innerHTML = `<span class="qb-sum-toast-dot"></span><span class="qb-sum-toast-text"></span>`;
+        toast.querySelector('.qb-sum-toast-text').textContent = label;
+        const activate = () => { openDrawer(); };
+        toast.addEventListener('click', activate);
+        toast.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
+        });
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add('show'));
+        summaryState.toastTimer = setTimeout(dismissSummaryToast, 6000);
+    }
+
+    function dismissSummaryToast() {
+        if (summaryState.toastTimer) {
+            clearTimeout(summaryState.toastTimer);
+            summaryState.toastTimer = null;
+        }
+        const toast = document.getElementById(SUMMARY_TOAST_ID);
+        if (!toast) return;
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 250);
+    }
+
     function removeSummaryUI() {
         document.getElementById(SUMMARY_PANEL_ID)?.remove();
+        document.getElementById(SUMMARY_FAB_ID)?.remove();
+        dismissSummaryToast();
+        summaryState.videoId = null;
+        summaryState.running = false;
+        summaryState.summarized = false;
+        summaryState.outputRaw = '';
+        summaryState.outputHtml = '';
+        summaryState.statusText = '';
     }
 
     // YouTube SPA navigation event

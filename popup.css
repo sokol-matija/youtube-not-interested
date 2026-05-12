@@ -25,12 +25,19 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body {
+html, body { margin: 0; padding: 0; }
+body {
     background: var(--bg);
     color: var(--text);
     font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 13px;
     width: 280px;
+    /* Vivaldi popup window caps at ~600-700px tall on this system.
+       Above that, popup either truncates without scroll or renders as a tiny
+       window. Cap body height and put the scroll inside .app so the popup
+       window always fits and content is fully reachable. */
+    max-height: 580px;
+    overflow: hidden;
 }
 
 .app {
@@ -38,6 +45,8 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    max-height: 580px;
+    overflow-y: auto;
 }
 
 /* Header */
