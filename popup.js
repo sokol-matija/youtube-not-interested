@@ -191,7 +191,7 @@ $('#transcriptTestBtn').addEventListener('click', async () => {
             return;
         }
 
-        const r = await fetch('http://localhost:7777/transcript', {
+        const r = await fetch(await self.QuickBlockBridge.bridgeUrl('/transcript'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ videoId }),
@@ -239,7 +239,7 @@ $('#claudeTestBtn').addEventListener('click', async () => {
     copyBtn.hidden = true;
     try {
         const t0 = Date.now();
-        const res = await fetch('http://localhost:7777/run', {
+        const res = await fetch(await self.QuickBlockBridge.bridgeUrl('/run'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -291,18 +291,21 @@ async function pingBridge() {
     if (!dot || !status) return;
     dot.classList.remove('ok', 'fail');
     status.textContent = 'checking…';
+    self.QuickBlockBridge.invalidate();
     const t0 = Date.now();
     try {
+        const url = await self.QuickBlockBridge.bridgeUrl('/health');
         const ctrl = new AbortController();
         const timeout = setTimeout(() => ctrl.abort(), 1500);
-        const res = await fetch('http://localhost:7777/health', { signal: ctrl.signal });
+        const res = await fetch(url, { signal: ctrl.signal });
         clearTimeout(timeout);
         const ms = Date.now() - t0;
         if (res.ok) {
             const data = await res.json().catch(() => ({}));
             dot.classList.add('ok');
             const model = data.defaultModel ? ` · ${data.defaultModel}` : '';
-            status.textContent = `online · ${ms}ms${model}`;
+            const port = data.port ? ` :${data.port}` : '';
+            status.textContent = `online${port} · ${ms}ms${model}`;
         } else {
             dot.classList.add('fail');
             status.textContent = `HTTP ${res.status}`;

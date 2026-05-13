@@ -336,7 +336,7 @@
     const SUMMARY_PANEL_ID = 'quick-block-summary-panel';
     const SUMMARY_FAB_ID = 'quick-block-summary-fab';
     const SUMMARY_TOAST_ID = 'quick-block-summary-toast';
-    const BRIDGE_URL = 'http://localhost:7777/run';
+    const bridgeUrl = (path) => self.QuickBlockBridge.bridgeUrl(path);
 
     // Shared state so the masthead-mounted FAB and body-mounted drawer stay in sync
     // even though they live in different DOM subtrees.
@@ -600,7 +600,7 @@
 
         let tr;
         try {
-            const r = await fetch('http://localhost:7777/transcript', {
+            const r = await fetch(await bridgeUrl('/transcript'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ videoId }),
@@ -658,7 +658,7 @@
 
         try {
             const t0 = Date.now();
-            const res = await fetch(BRIDGE_URL, {
+            const res = await fetch(await bridgeUrl('/run'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt, model }),

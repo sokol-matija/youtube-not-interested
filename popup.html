@@ -80,7 +80,7 @@
             <button class="btn-primary" id="syncBtn">Sync now</button>
         </section>
 
-        <section class="health" id="healthRow" title="Local Claude bridge on http://localhost:7777">
+        <section class="health" id="healthRow" title="Local Claude bridge (auto-detected port)">
             <div class="health-left">
                 <span class="health-dot" id="healthDot"></span>
                 <span class="health-label">Bridge</span>
@@ -134,6 +134,7 @@
         </footer>
     </div>
     <script src="lib/storage.js" defer></script>
+    <script src="lib/bridge.js" defer></script>
     <script src="popup.js" defer></script>
 </body>
 </html>

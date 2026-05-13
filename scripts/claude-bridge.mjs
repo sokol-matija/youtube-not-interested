@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Local bridge: extension POSTs prompt → spawns `claude -p` → returns stdout.
-// Run: node scripts/claude-bridge.mjs
-// Ctrl-C to stop. Listens on http://localhost:7777
+// Run: node scripts/claude-bridge.mjs              (defaults to PORT=7777)
+//      PORT=7779 node scripts/claude-bridge.mjs    (mac, to avoid VoiceMode on 7777)
+// Ctrl-C to stop.
 
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 
-const PORT = 7777;
+const PORT = Number(process.env.PORT) || 7777;
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const DEFAULT_MODEL = process.env.CLAUDE_MODEL || 'haiku';
 // Path to a Python interpreter with `youtube-transcript-api` installed.
