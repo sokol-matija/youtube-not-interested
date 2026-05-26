@@ -46,6 +46,7 @@ async function render() {
     $('#hideShareToggle').checked = !!settings.hideShareButton;
     $('#hideThanksToggle').checked = !!settings.hideThanksButton;
     $('#hideSearchOnWatchToggle').checked = !!settings.hideSearchOnWatch;
+    $('#autoReadToggle').checked = settings.autoReadSummary !== false;
     $('#modelSelect').value = settings.claudeModel || 'sonnet';
 
     const list = $('#recentList');
@@ -111,6 +112,10 @@ $('#hideThanksToggle').addEventListener('change', async (e) => {
 
 $('#hideSearchOnWatchToggle').addEventListener('change', async (e) => {
     await Storage.setSettings({ hideSearchOnWatch: e.target.checked });
+});
+
+$('#autoReadToggle').addEventListener('change', async (e) => {
+    await Storage.setSettings({ autoReadSummary: e.target.checked });
 });
 
 $('#syncBtn').addEventListener('click', async () => {

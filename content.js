@@ -336,6 +336,7 @@
     const SUMMARY_PANEL_ID = 'quick-block-summary-panel';
     const SUMMARY_FAB_ID = 'quick-block-summary-fab';
     const SUMMARY_TOAST_ID = 'quick-block-summary-toast';
+    const SUMMARY_PLAYER_ID = 'qb-sum-player';
     const bridgeUrl = (path) => self.QuickBlockBridge.bridgeUrl(path);
 
     // Shared state so the masthead-mounted FAB and body-mounted drawer stay in sync
@@ -348,6 +349,9 @@
         outputHtml: '',
         statusText: '',
         toastTimer: null,
+        ttsLoading: false,
+        audio: null,
+        audioToken: 0,
     };
 
     // Minimal markdown→HTML for summary output. Escapes HTML first to prevent
@@ -467,6 +471,7 @@
                 <div class="qb-sum-status"></div>
                 <div class="qb-sum-actions" hidden>
                     <button class="qb-sum-copy" type="button">Copy summary</button>
+                    <button class="qb-sum-read" type="button">Read</button>
                 </div>
                 <div class="qb-sum-body" hidden></div>
             </aside>
@@ -476,6 +481,7 @@
         root.querySelector('.qb-sum-min').addEventListener('click', closeDrawer);
         root.querySelector('.qb-sum-close').addEventListener('click', closeDrawer);
         root.querySelector('.qb-sum-copy').addEventListener('click', copySummary);
+        root.querySelector('.qb-sum-read').addEventListener('click', () => readSummary());
 
         // Click anywhere outside the drawer + FAB + toast dismisses. Generation keeps running.
         document.addEventListener('mousedown', (e) => {
@@ -701,6 +707,13 @@
                     showSummaryToast(label);
                     getSummaryFab()?.classList.add('qb-sum-fab-ready');
                 }
+
+                // Auto-read the summary on fresh generation. Cached loads don't
+                // trigger this — the user already heard it when it first ran.
+                try {
+                    const s = await Storage.getSettings();
+                    if (s.autoReadSummary !== false) readSummary();
+                } catch {}
             } else {
                 const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
                 const liveStatus = getSummaryDrawer()?.querySelector('.qb-sum-status');
@@ -731,6 +744,207 @@
             btn.textContent = 'Copied ✓';
             setTimeout(() => { btn.textContent = orig; }, 1200);
         } catch {}
+    }
+
+    // ── TTS: read summary aloud via Kokoro (routed through background.js) ─────
+    async function readSummary() {
+        const raw = summaryState.outputRaw;
+        if (!raw) return;
+        if (summaryState.ttsLoading) return;
+        const text = self.QuickBlockMarkdown?.stripMarkdown(raw) || raw;
+        if (!text.trim()) return;
+
+        // Invalidate any in-flight request from a previous read.
+        const token = ++summaryState.audioToken;
+        stopAudio();
+        summaryState.ttsLoading = true;
+        setReadButtonState(true);
+        mountPlayer('loading', 'Generating audio…');
+
+        let res;
+        try {
+            res = await chrome.runtime.sendMessage({ type: 'tts-generate', text });
+        } catch (e) {
+            res = { ok: false, error: e?.message || 'sendMessage failed' };
+        }
+
+        // A newer request (or cleanup) superseded this one — drop the result.
+        if (token !== summaryState.audioToken) {
+            summaryState.ttsLoading = false;
+            setReadButtonState(false);
+            return;
+        }
+
+        summaryState.ttsLoading = false;
+        setReadButtonState(false);
+
+        if (!res?.ok || !res.dataUrl) {
+            mountPlayer('error', `TTS failed: ${res?.error || 'unknown'}`);
+            return;
+        }
+
+        playAudio(res.dataUrl, token);
+    }
+
+    function setReadButtonState(loading) {
+        const btn = getSummaryDrawer()?.querySelector('.qb-sum-read');
+        if (!btn) return;
+        btn.disabled = !!loading;
+        btn.textContent = loading ? 'Loading…' : 'Read';
+    }
+
+    function fmtTime(s) {
+        if (!isFinite(s) || s < 0) s = 0;
+        const m = Math.floor(s / 60);
+        const r = Math.floor(s % 60);
+        return `${m}:${r.toString().padStart(2, '0')}`;
+    }
+
+    function getPlayerEl() { return document.getElementById(SUMMARY_PLAYER_ID); }
+
+    function mountPlayer(state, label) {
+        let el = getPlayerEl();
+        if (!el) {
+            el = document.createElement('div');
+            el.id = SUMMARY_PLAYER_ID;
+            el.innerHTML = `
+                <span class="qb-sum-player-dot"></span>
+                <button class="qb-sum-player-btn qb-sum-player-play" type="button" aria-label="Play / pause" disabled>
+                    <svg class="qb-sum-player-icon-play" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                    <svg class="qb-sum-player-icon-pause hidden" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                        <path d="M6 5h4v14H6zm8 0h4v14h-4z"/>
+                    </svg>
+                </button>
+                <span class="qb-sum-player-label"></span>
+                <input class="qb-sum-player-seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek" disabled>
+                <span class="qb-sum-player-time">0:00 / 0:00</span>
+                <button class="qb-sum-player-btn qb-sum-player-close" type="button" aria-label="Close player">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            `;
+            document.body.appendChild(el);
+
+            el.querySelector('.qb-sum-player-play').addEventListener('click', togglePlayPause);
+            el.querySelector('.qb-sum-player-close').addEventListener('click', closePlayer);
+
+            const seek = el.querySelector('.qb-sum-player-seek');
+            seek.addEventListener('input', () => {
+                const audio = summaryState.audio;
+                if (!audio || !isFinite(audio.duration)) return;
+                seek.dataset.seeking = '1';
+                const t = (seek.value / 1000) * audio.duration;
+                el.querySelector('.qb-sum-player-time').textContent =
+                    `${fmtTime(t)} / ${fmtTime(audio.duration)}`;
+            });
+            seek.addEventListener('change', () => {
+                const audio = summaryState.audio;
+                seek.dataset.seeking = '';
+                if (!audio || !isFinite(audio.duration)) return;
+                audio.currentTime = (seek.value / 1000) * audio.duration;
+            });
+
+            requestAnimationFrame(() => el.classList.add('show'));
+        }
+
+        el.classList.remove('loading', 'error', 'playing', 'paused');
+        if (state) el.classList.add(state);
+        const labelEl = el.querySelector('.qb-sum-player-label');
+        if (labelEl) labelEl.textContent = label || '';
+
+        // Disable controls while not actually playable.
+        const playBtn = el.querySelector('.qb-sum-player-play');
+        const seek = el.querySelector('.qb-sum-player-seek');
+        const playable = state === 'playing' || state === 'paused';
+        if (playBtn) playBtn.disabled = !playable;
+        if (seek) seek.disabled = !playable;
+    }
+
+    function setPlayPauseIcon(paused) {
+        const el = getPlayerEl();
+        if (!el) return;
+        el.querySelector('.qb-sum-player-icon-play').classList.toggle('hidden', !paused);
+        el.querySelector('.qb-sum-player-icon-pause').classList.toggle('hidden', paused);
+    }
+
+    function playAudio(dataUrl, token) {
+        stopAudio();
+        const audio = new Audio(dataUrl);
+        summaryState.audio = audio;
+        mountPlayer('playing', '');
+        setPlayPauseIcon(false);
+
+        audio.addEventListener('loadedmetadata', () => {
+            const el = getPlayerEl();
+            if (!el) return;
+            el.querySelector('.qb-sum-player-time').textContent =
+                `0:00 / ${fmtTime(audio.duration)}`;
+        });
+        audio.addEventListener('timeupdate', () => {
+            const el = getPlayerEl();
+            if (!el) return;
+            const seek = el.querySelector('.qb-sum-player-seek');
+            if (seek.dataset.seeking !== '1' && isFinite(audio.duration) && audio.duration > 0) {
+                seek.value = Math.round((audio.currentTime / audio.duration) * 1000);
+            }
+            el.querySelector('.qb-sum-player-time').textContent =
+                `${fmtTime(audio.currentTime)} / ${fmtTime(audio.duration || 0)}`;
+        });
+        audio.addEventListener('play', () => { mountPlayer('playing', ''); setPlayPauseIcon(false); });
+        audio.addEventListener('pause', () => {
+            // 'pause' also fires when the audio ends — keep the player visible but
+            // flip the icon.
+            if (!audio.ended) { mountPlayer('paused', ''); }
+            setPlayPauseIcon(true);
+        });
+        audio.addEventListener('ended', () => {
+            mountPlayer('paused', 'Finished');
+            setPlayPauseIcon(true);
+            const el = getPlayerEl();
+            if (el && isFinite(audio.duration)) {
+                el.querySelector('.qb-sum-player-seek').value = 1000;
+            }
+        });
+        audio.addEventListener('error', () => {
+            mountPlayer('error', 'Audio playback failed');
+        });
+
+        audio.play().catch((e) => {
+            // Autoplay can be blocked if the user hasn't interacted with the page yet.
+            mountPlayer('paused', 'Click ▶ to play');
+            setPlayPauseIcon(true);
+            console.warn('[Quick Block] audio.play() rejected:', e?.message || e);
+        });
+    }
+
+    function togglePlayPause() {
+        const audio = summaryState.audio;
+        if (!audio) return;
+        if (audio.paused) audio.play().catch(() => {});
+        else audio.pause();
+    }
+
+    function stopAudio() {
+        const audio = summaryState.audio;
+        if (!audio) return;
+        try { audio.pause(); } catch {}
+        try { audio.src = ''; } catch {}
+        summaryState.audio = null;
+    }
+
+    function closePlayer() {
+        summaryState.audioToken++;  // invalidate any in-flight TTS
+        summaryState.ttsLoading = false;
+        setReadButtonState(false);
+        stopAudio();
+        const el = getPlayerEl();
+        if (!el) return;
+        el.classList.remove('show');
+        setTimeout(() => el.remove(), 250);
     }
 
     function showSummaryToast(label) {
@@ -767,6 +981,7 @@
         document.getElementById(SUMMARY_PANEL_ID)?.remove();
         document.getElementById(SUMMARY_FAB_ID)?.remove();
         dismissSummaryToast();
+        closePlayer();
         summaryState.videoId = null;
         summaryState.running = false;
         summaryState.summarized = false;

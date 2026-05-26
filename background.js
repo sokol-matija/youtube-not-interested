@@ -6,6 +6,8 @@ importScripts('lib/storage.js');
 
 const SYNC_ALARM = 'wl-sync';
 const SYNC_PERIOD_MIN = 360;
+const KOKORO_URL = 'http://sokol.falcon-parore.ts.net:8880/v1/audio/speech';
+const KOKORO_VOICE = 'af_sky';
 
 chrome.runtime.onInstalled.addListener(() => {
     chrome.alarms.create(SYNC_ALARM, { periodInMinutes: SYNC_PERIOD_MIN, delayInMinutes: 1 });
@@ -25,7 +27,39 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         triggerSync().then(sendResponse);
         return true;
     }
+    if (msg?.type === 'tts-generate') {
+        ttsGenerate(msg.text).then(sendResponse);
+        return true;
+    }
 });
+
+async function ttsGenerate(text) {
+    if (!text || typeof text !== 'string') {
+        return { ok: false, error: 'empty text' };
+    }
+    try {
+        const r = await fetch(KOKORO_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'tts-1',
+                input: text,
+                voice: KOKORO_VOICE,
+                response_format: 'mp3',
+            }),
+        });
+        if (!r.ok) return { ok: false, error: `HTTP ${r.status}` };
+        const blob = await r.blob();
+        const reader = new FileReader();
+        return await new Promise(resolve => {
+            reader.onload = () => resolve({ ok: true, dataUrl: reader.result });
+            reader.onerror = () => resolve({ ok: false, error: 'blob read failed' });
+            reader.readAsDataURL(blob);
+        });
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+}
 
 async function findYouTubeTab() {
     const tabs = await chrome.tabs.query({ url: '*://*.youtube.com/*' });
