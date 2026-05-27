@@ -537,6 +537,13 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
 .qb-sum-player-btn[disabled]:hover { background: transparent; }
 .qb-sum-player-btn svg { display: block; }
 #qb-sum-player .hidden { display: none !important; }
+.qb-sum-player-speed {
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 8px;
+    min-width: 36px;
+}
 .qb-sum-player-seek {
     flex: 1;
     height: 4px;

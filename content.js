@@ -230,6 +230,13 @@
     // TTS so a cached entry isn't re-read every time the observer ticks.
     let autoSummarizeTriggeredFor = null;
     let autoReadTriggeredFor = null;
+    // Persisted TTS playback speed. Cycle 1 → 1.5 → 2 via the player button.
+    const PLAYBACK_RATES = [1, 1.5, 2];
+    let savedPlaybackRate = 1;
+    chrome.storage.local.get(['ttsPlaybackRate'], (r) => {
+        const v = Number(r?.ttsPlaybackRate);
+        if (PLAYBACK_RATES.includes(v)) savedPlaybackRate = v;
+    });
 
     async function waitForElement(selector, timeoutMs = 5000) {
         const start = Date.now();
@@ -900,6 +907,7 @@
                         <path d="M6 5h4v14H6zm8 0h4v14h-4z"/>
                     </svg>
                 </button>
+                <button class="qb-sum-player-btn qb-sum-player-speed" type="button" aria-label="Playback speed" disabled>1x</button>
                 <span class="qb-sum-player-label"></span>
                 <input class="qb-sum-player-seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek" disabled>
                 <span class="qb-sum-player-time">0:00 / 0:00</span>
@@ -914,6 +922,7 @@
 
             el.querySelector('.qb-sum-player-play').addEventListener('click', togglePlayPause);
             el.querySelector('.qb-sum-player-close').addEventListener('click', closePlayer);
+            el.querySelector('.qb-sum-player-speed').addEventListener('click', cyclePlaybackSpeed);
 
             const seek = el.querySelector('.qb-sum-player-seek');
             seek.addEventListener('input', () => {
@@ -942,9 +951,29 @@
         // Disable controls while not actually playable.
         const playBtn = el.querySelector('.qb-sum-player-play');
         const seek = el.querySelector('.qb-sum-player-seek');
+        const speedBtn = el.querySelector('.qb-sum-player-speed');
         const playable = state === 'playing' || state === 'paused';
         if (playBtn) playBtn.disabled = !playable;
         if (seek) seek.disabled = !playable;
+        if (speedBtn) {
+            speedBtn.disabled = !playable;
+            speedBtn.textContent = formatRate(savedPlaybackRate);
+        }
+    }
+
+    function formatRate(r) {
+        // Drop trailing zeros: 1.5 → "1.5x", 1 → "1x", 2 → "2x".
+        return `${Number(r).toString()}x`;
+    }
+
+    function cyclePlaybackSpeed() {
+        const idx = PLAYBACK_RATES.indexOf(savedPlaybackRate);
+        savedPlaybackRate = PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length];
+        chrome.storage.local.set({ ttsPlaybackRate: savedPlaybackRate });
+        if (summaryState.audio) summaryState.audio.playbackRate = savedPlaybackRate;
+        const el = getPlayerEl();
+        const btn = el?.querySelector('.qb-sum-player-speed');
+        if (btn) btn.textContent = formatRate(savedPlaybackRate);
     }
 
     function setPlayPauseIcon(paused) {
@@ -957,6 +986,7 @@
     function playAudio(dataUrl, token) {
         stopAudio();
         const audio = new Audio(dataUrl);
+        audio.playbackRate = savedPlaybackRate;
         summaryState.audio = audio;
         mountPlayer('playing', '');
         setPlayPauseIcon(false);
