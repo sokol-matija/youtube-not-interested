@@ -344,7 +344,13 @@
         await new Promise(r => setTimeout(r, 200));
         if (summaryState.summarized && summaryState.videoId === id) return;
         autoSummarizeTriggeredFor = id;
-        runSummarize();
+        await runSummarize();
+        // Roll back the latch if generation didn't actually produce a summary
+        // (bridge unreachable, transcript fetch failed, etc.) so the observer
+        // can retry once the user fixes whatever was broken.
+        if (!summaryState.summarized || summaryState.videoId !== id) {
+            autoSummarizeTriggeredFor = null;
+        }
     }
 
     async function tryAutoOpenComments() {
@@ -358,8 +364,12 @@
         if (!btn) return;
         const pressed = btn.getAttribute('aria-pressed');
         if (pressed !== 'false') return; // already open, or not yet wired — wait
-        btn.click();
+        // Re-check the latch after the await — a parallel observer tick may
+        // have entered tryAutoOpenComments and clicked between our pre-await
+        // check and now. Reserve sync before the click to close the race.
+        if (commentsAutoOpenedFor === id) return;
         commentsAutoOpenedFor = id;
+        btn.click();
     }
 
     async function reopenCommentsAfterFullscreenExit() {
@@ -492,7 +502,8 @@
             const s = await Storage.getSettings();
             if (s.autoSummarize && autoReadTriggeredFor !== videoId) {
                 autoReadTriggeredFor = videoId;
-                readSummary();
+                const ok = await readSummary();
+                if (!ok) autoReadTriggeredFor = null;  // allow retry on failure
             }
         } catch {}
 
@@ -777,7 +788,8 @@
                     const s = await Storage.getSettings();
                     if (s.autoSummarize && autoReadTriggeredFor !== videoId) {
                         autoReadTriggeredFor = videoId;
-                        readSummary();
+                        const ok = await readSummary();
+                        if (!ok) autoReadTriggeredFor = null;  // allow retry on failure
                     }
                 } catch {}
             } else {
@@ -813,12 +825,16 @@
     }
 
     // ── TTS: read summary aloud via Kokoro (routed through background.js) ─────
+    // Returns true if TTS produced an audio URL we handed to playAudio, false
+    // on any failure or supersession. Callers can use this to roll back per-video
+    // auto-read latches so a transient Kokoro outage doesn't pin the video as
+    // "already attempted".
     async function readSummary() {
         const raw = summaryState.outputRaw;
-        if (!raw) return;
-        if (summaryState.ttsLoading) return;
+        if (!raw) return false;
+        if (summaryState.ttsLoading) return false;
         const text = self.QuickBlockMarkdown?.stripMarkdown(raw) || raw;
-        if (!text.trim()) return;
+        if (!text.trim()) return false;
 
         // Invalidate any in-flight request from a previous read.
         const token = ++summaryState.audioToken;
@@ -838,7 +854,7 @@
         if (token !== summaryState.audioToken) {
             summaryState.ttsLoading = false;
             setReadButtonState(false);
-            return;
+            return false;
         }
 
         summaryState.ttsLoading = false;
@@ -846,10 +862,11 @@
 
         if (!res?.ok || !res.dataUrl) {
             mountPlayer('error', `TTS failed: ${res?.error || 'unknown'}`);
-            return;
+            return false;
         }
 
         playAudio(res.dataUrl, token);
+        return true;
     }
 
     function setReadButtonState(loading) {
@@ -976,6 +993,10 @@
             }
         });
         audio.addEventListener('error', () => {
+            // Setting audio.src='' in stopAudio fires a synthetic 'error' on
+            // some Chromium versions — ignore it so we don't flash a red error
+            // label during a clean close/replace.
+            if (audio._intentionalStop) return;
             mountPlayer('error', 'Audio playback failed');
         });
 
@@ -997,6 +1018,7 @@
     function stopAudio() {
         const audio = summaryState.audio;
         if (!audio) return;
+        audio._intentionalStop = true;
         try { audio.pause(); } catch {}
         try { audio.src = ''; } catch {}
         summaryState.audio = null;
