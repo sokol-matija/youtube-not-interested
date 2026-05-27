@@ -224,6 +224,12 @@
     // lastWatchVideoId so the comments retry survives a failed first attempt
     // (yt-navigate-finish can fire before the comments button is clickable).
     let commentsAutoOpenedFor = null;
+    // Latches per videoId for the auto-summarize + auto-read flows. The summary
+    // latch fires once we kick off generation (so the observer doesn't re-fire
+    // while runSummarize is still running). The read latch fires once we ask for
+    // TTS so a cached entry isn't re-read every time the observer ticks.
+    let autoSummarizeTriggeredFor = null;
+    let autoReadTriggeredFor = null;
 
     async function waitForElement(selector, timeoutMs = 5000) {
         const start = Date.now();
@@ -318,6 +324,29 @@
     // suppress the real click attempt that follows once YT resets the button.
     // Manual close during the same video still suppresses re-clicks because
     // the latch is keyed by videoId.
+    // Idempotent auto-summarize trigger. Fires runSummarize() once per videoId
+    // when the master toggle is on. Bails if a summary already exists (cached
+    // restore handles the auto-read path separately) or generation is in flight.
+    async function tryAutoSummarize() {
+        const id = currentWatchVideoId();
+        if (!id) return;
+        if (!extensionAlive()) return;
+        if (autoSummarizeTriggeredFor === id) return;
+        if (summaryState.running) return;
+        if (summaryState.summarized && summaryState.videoId === id) return;
+        const settings = await Storage.getSettings();
+        if (!settings.autoSummarize) return;
+        // Make sure the drawer + FAB are mounted so runSummarize has DOM to
+        // write status into. injectSummaryUI is idempotent.
+        if (!getSummaryFab()) injectSummaryUI();
+        // restoreCachedSummary is async; give it a beat so we don't double-fire
+        // on a cached video right as the observer tick races the cache read.
+        await new Promise(r => setTimeout(r, 200));
+        if (summaryState.summarized && summaryState.videoId === id) return;
+        autoSummarizeTriggeredFor = id;
+        runSummarize();
+    }
+
     async function tryAutoOpenComments() {
         const id = currentWatchVideoId();
         if (!id) return;
@@ -456,6 +485,16 @@
         summaryState.outputHtml = entry.html || '';
         summaryState.statusText = entry.statusText || '';
         summaryState.summarized = true;
+
+        // When the combined auto-summarize toggle is on, a cached entry should
+        // still trigger TTS — user opened the page expecting it to play.
+        try {
+            const s = await Storage.getSettings();
+            if (s.autoSummarize && autoReadTriggeredFor !== videoId) {
+                autoReadTriggeredFor = videoId;
+                readSummary();
+            }
+        } catch {}
 
         const drawer = getSummaryDrawer();
         const body = drawer?.querySelector('.qb-sum-body');
@@ -731,11 +770,15 @@
                     getSummaryFab()?.classList.add('qb-sum-fab-ready');
                 }
 
-                // Auto-read the summary on fresh generation. Cached loads don't
-                // trigger this — the user already heard it when it first ran.
+                // Auto-read the summary on fresh generation when the combined
+                // auto-summarize + read toggle is on. Latched per videoId so
+                // observer reentries don't restart TTS mid-playback.
                 try {
                     const s = await Storage.getSettings();
-                    if (s.autoReadSummary !== false) readSummary();
+                    if (s.autoSummarize && autoReadTriggeredFor !== videoId) {
+                        autoReadTriggeredFor = videoId;
+                        readSummary();
+                    }
                 } catch {}
             } else {
                 const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
@@ -1019,21 +1062,23 @@
         // The latch is keyed by videoId so different videos already invalidate
         // it; this also covers same-video revisits and stale state from prev nav.
         commentsAutoOpenedFor = null;
+        autoSummarizeTriggeredFor = null;
+        autoReadTriggeredFor = null;
         applyOnWatchClass();
         applyWatchAutomations();
         removeSummaryUI();
         if (currentWatchVideoId()) {
-            setTimeout(injectSummaryUI, 400);
+            setTimeout(() => { injectSummaryUI(); tryAutoSummarize(); }, 400);
         }
     });
     // Also fire on initial load (event may have already passed)
     if (document.readyState === 'complete') {
         applyWatchAutomations();
-        if (currentWatchVideoId()) injectSummaryUI();
+        if (currentWatchVideoId()) { injectSummaryUI(); tryAutoSummarize(); }
     } else {
         window.addEventListener('load', () => {
             applyWatchAutomations();
-            if (currentWatchVideoId()) injectSummaryUI();
+            if (currentWatchVideoId()) { injectSummaryUI(); tryAutoSummarize(); }
         });
     }
 
@@ -1067,6 +1112,8 @@
             // mounts after yt-navigate-finish, leaving the original click attempt
             // with nothing to click. Latched per videoId so we don't spam clicks.
             tryAutoOpenComments();
+            // Auto-summarize when the master toggle is on. Latched per videoId.
+            tryAutoSummarize();
         });
         observer.observe(document.body, { childList: true, subtree: true });
 
