@@ -220,6 +220,10 @@
 
     // ── Watch-page automations ────────────────────────────────────────────────
     let lastWatchVideoId = null;
+    // Tracks the videoId we've already auto-opened comments for. Separate from
+    // lastWatchVideoId so the comments retry survives a failed first attempt
+    // (yt-navigate-finish can fire before the comments button is clickable).
+    let commentsAutoOpenedFor = null;
 
     async function waitForElement(selector, timeoutMs = 5000) {
         const start = Date.now();
@@ -303,11 +307,30 @@
         }
 
         if (settings.autoOpenComments) {
-            const commentsBtn = await waitForElement('button[aria-label="Comments"]');
-            if (commentsBtn && commentsBtn.getAttribute('aria-pressed') === 'false') {
-                commentsBtn.click();
-            }
+            await tryAutoOpenComments();
         }
+    }
+
+    // Idempotent: click the comments toggle at most once per videoId.
+    // The latch is set ONLY after we actually click — never on observed
+    // aria-pressed='true', because YT often carries stale aria-pressed from the
+    // previous video's button DOM into the new page. Latching on that would
+    // suppress the real click attempt that follows once YT resets the button.
+    // Manual close during the same video still suppresses re-clicks because
+    // the latch is keyed by videoId.
+    async function tryAutoOpenComments() {
+        const id = currentWatchVideoId();
+        if (!id) return;
+        if (commentsAutoOpenedFor === id) return;
+        if (!extensionAlive()) return;
+        const settings = await Storage.getSettings();
+        if (!settings.autoOpenComments) return;
+        const btn = document.querySelector('ytd-comments-header-renderer button[aria-label="Comments"], #comments button[aria-label="Comments"], button[aria-label="Comments"]');
+        if (!btn) return;
+        const pressed = btn.getAttribute('aria-pressed');
+        if (pressed !== 'false') return; // already open, or not yet wired — wait
+        btn.click();
+        commentsAutoOpenedFor = id;
     }
 
     async function reopenCommentsAfterFullscreenExit() {
@@ -992,6 +1015,10 @@
 
     // YouTube SPA navigation event
     document.addEventListener('yt-navigate-finish', () => {
+        // Clear per-video latches so a revisit re-evaluates state from scratch.
+        // The latch is keyed by videoId so different videos already invalidate
+        // it; this also covers same-video revisits and stale state from prev nav.
+        commentsAutoOpenedFor = null;
         applyOnWatchClass();
         applyWatchAutomations();
         removeSummaryUI();
@@ -1029,7 +1056,18 @@
         setTimeout(processVideos, 500);
         setTimeout(processVideos, 1500);
 
-        const observer = new MutationObserver(() => processVideos());
+        const observer = new MutationObserver(() => {
+            processVideos();
+            // Self-heal summary UI on SPA nav: yt-navigate-finish sometimes fires
+            // before the masthead is ready, or doesn't fire at all on home→video
+            // transitions. Both inject functions are idempotent and bail fast if
+            // already mounted, so this is cheap.
+            if (currentWatchVideoId() && !getSummaryFab()) injectSummaryUI();
+            // Same self-heal for auto-open comments — the comments toggle often
+            // mounts after yt-navigate-finish, leaving the original click attempt
+            // with nothing to click. Latched per videoId so we don't spam clicks.
+            tryAutoOpenComments();
+        });
         observer.observe(document.body, { childList: true, subtree: true });
 
         // First-run: if we've never synced, kick one off via background
