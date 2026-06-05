@@ -231,7 +231,7 @@
     let autoSummarizeTriggeredFor = null;
     let autoReadTriggeredFor = null;
     // Persisted TTS playback speed. Cycle 1 → 1.5 → 2 via the player button.
-    const PLAYBACK_RATES = [1, 1.5, 2];
+    const PLAYBACK_RATES = [1, 1.25, 1.5, 1.75, 2];
     let savedPlaybackRate = 1;
     chrome.storage.local.get(['ttsPlaybackRate'], (r) => {
         const v = Number(r?.ttsPlaybackRate);
@@ -406,6 +406,7 @@
     const SUMMARY_FAB_ID = 'quick-block-summary-fab';
     const SUMMARY_TOAST_ID = 'quick-block-summary-toast';
     const SUMMARY_PLAYER_ID = 'qb-sum-player';
+    const SUMMARY_TTS_FAB_ID = 'quick-block-tts-fab';
     const bridgeUrl = (path) => self.QuickBlockBridge.bridgeUrl(path);
 
     // Shared state so the masthead-mounted FAB and body-mounted drawer stay in sync
@@ -478,6 +479,7 @@
     }
 
     function getSummaryFab() { return document.getElementById(SUMMARY_FAB_ID); }
+    function getTtsFab()     { return document.getElementById(SUMMARY_TTS_FAB_ID); }
     function getSummaryRoot() { return document.getElementById(SUMMARY_PANEL_ID); }
     function getSummaryDrawer() { return getSummaryRoot()?.querySelector('.qb-sum-drawer'); }
 
@@ -487,6 +489,7 @@
         summaryState.videoId = vid;
         injectSummaryDrawer();
         injectSummaryFab();
+        injectTtsFab();
         restoreCachedSummary(vid);
     }
 
@@ -502,6 +505,7 @@
         summaryState.outputHtml = entry.html || '';
         summaryState.statusText = entry.statusText || '';
         summaryState.summarized = true;
+        syncTtsFabState();
 
         // When the combined auto-summarize toggle is on, a cached entry should
         // still trigger TTS — user opened the page expecting it to play.
@@ -563,16 +567,24 @@
         root.querySelector('.qb-sum-copy').addEventListener('click', copySummary);
         root.querySelector('.qb-sum-read').addEventListener('click', () => readSummary());
 
-        // Click anywhere outside the drawer + FAB + toast dismisses. Generation keeps running.
-        document.addEventListener('mousedown', (e) => {
-            const drawer = getSummaryDrawer();
-            if (!drawer?.classList.contains('open')) return;
-            if (root.contains(e.target)) return;
-            if (getSummaryFab()?.contains(e.target)) return;
-            const toast = document.getElementById(SUMMARY_TOAST_ID);
-            if (toast?.contains(e.target)) return;
-            closeDrawer();
-        });
+        // Click-outside dismissal — installed once per page load (not per inject call).
+        // Uses live getElementById so SPA re-injections don't accumulate stale closures.
+        if (!injectSummaryDrawer._mousedownInstalled) {
+            injectSummaryDrawer._mousedownInstalled = true;
+            document.addEventListener('mousedown', (e) => {
+                const drawer = getSummaryDrawer();
+                if (!drawer?.classList.contains('open')) return;
+                const liveRoot = document.getElementById(SUMMARY_PANEL_ID);
+                if (liveRoot?.contains(e.target)) return;
+                if (getSummaryFab()?.contains(e.target)) return;
+                const toast = document.getElementById(SUMMARY_TOAST_ID);
+                if (toast?.contains(e.target)) return;
+                // Don't close when interacting with the TTS mini-player
+                const player = document.getElementById(SUMMARY_PLAYER_ID);
+                if (player?.contains(e.target)) return;
+                closeDrawer();
+            });
+        }
 
         root.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') closeDrawer();
@@ -630,12 +642,60 @@
         fab.addEventListener('click', () => {
             const drawer = getSummaryDrawer();
             if (drawer?.classList.contains('open')) { closeDrawer(); return; }
-            if (summaryState.running) return;
+            if (summaryState.running) { openDrawer(); return; }  // click while streaming → watch it
             if (summaryState.summarized) { openDrawer(); return; }
             runSummarize();
         });
 
         if (summaryState.running) fab.classList.add('qb-sum-fab-running');
+    }
+
+    function injectTtsFab() {
+        if (getTtsFab()) return;
+        const summaryFab = getSummaryFab();
+        if (!summaryFab?.parentElement) return;
+
+        const fab = document.createElement('button');
+        fab.id = SUMMARY_TTS_FAB_ID;
+        fab.type = 'button';
+        fab.className = 'qb-tts-fab';
+        fab.title = 'Read summary aloud';
+        fab.setAttribute('aria-label', 'Read summary');
+        fab.innerHTML = `
+            <svg class="qb-tts-fab-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            </svg>
+            <svg class="qb-sum-fab-spinner" viewBox="0 0 36 36" aria-hidden="true">
+                <circle class="qb-sum-fab-spinner-track" cx="18" cy="18" r="15"/>
+                <circle class="qb-sum-fab-spinner-arc" cx="18" cy="18" r="15"/>
+            </svg>
+        `;
+
+        // Insert immediately left of the summary FAB
+        summaryFab.parentElement.insertBefore(fab, summaryFab);
+        syncTtsFabState();
+
+        fab.addEventListener('click', () => {
+            if (summaryState.ttsLoading) return;
+            if (!summaryState.summarized) return;
+            const audio = summaryState.audio;
+            if (audio && !audio.ended) {
+                togglePlayPause();
+                return;
+            }
+            readSummary();
+        });
+    }
+
+    function syncTtsFabState() {
+        const fab = getTtsFab();
+        if (!fab) return;
+        fab.classList.toggle('qb-tts-fab-disabled', !summaryState.summarized);
+        fab.classList.toggle('qb-tts-fab-loading', !!summaryState.ttsLoading);
+        const audio = summaryState.audio;
+        fab.classList.toggle('qb-tts-fab-playing', !!(audio && !audio.paused && !audio.ended));
     }
 
     function openDrawer() {
@@ -723,88 +783,122 @@
 
         const transcriptText = tr.segments.map(s => s.text).join(' ');
 
-        const prompt = [
-            `Here is a transcript from a ~20-minute video/podcast. Summarize it with:`,
-            ``,
-            `What it's about (2–3 sentences)`,
-            `Main points covered (in order, as bullets)`,
-            `Key insights, opinions, or recommendations worth remembering`,
-            `Verdict or conclusion (if one is given)`,
-            ``,
-            `Be thorough but concise — I want the full value without watching/listening.`,
-            ``,
-            `Title: ${tr.title}`,
-            ``,
-            `Transcript:`,
-            transcriptText,
-        ].join('\n');
+        // Compute duration from last segment timestamp
+        const lastSegMs = tr.segments.length ? (tr.segments[tr.segments.length - 1].t || 0) : 0;
+        const totalSec = Math.round(lastSegMs / 1000);
+        const durMin = Math.floor(totalSec / 60);
+        const durSec = totalSec % 60;
+        const duration = durMin > 0
+            ? (durSec > 0 ? `${durMin} min ${durSec} sec` : `${durMin} min`)
+            : `${durSec} sec`;
+
+        const profiles = await Storage.getSummaryProfiles();
+        const activeProfileId = settings.activeSummaryProfileId || 'standard';
+        const activeProfile = profiles.find(p => p.id === activeProfileId) || profiles[0];
+
+        const prompt = (activeProfile.prompt || '')
+            .replace('{{title}}', tr.title || '')
+            .replace('{{duration}}', duration)
+            .replace('{{transcript}}', transcriptText);
 
         summaryState.statusText = `Summarizing with ${model}…`;
+        summaryState.outputRaw = '';
         if (status) status.textContent = summaryState.statusText;
+        // Show body immediately so streaming text appears as it arrives
+        if (body) { body.hidden = false; body.textContent = ''; }
 
         try {
             const t0 = Date.now();
-            const res = await fetch(await bridgeUrl('/run'), {
+            const streamRes = await fetch(await bridgeUrl('/run-stream'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt, model }),
             });
-            const data = await res.json();
-            if (data.ok) {
-                summaryState.outputRaw = data.output;
-                summaryState.outputHtml = mdToHtml(data.output);
-                summaryState.statusText = `${model} · ${Math.round((Date.now() - t0) / 100) / 10}s · ${tr.segments.length} segments`;
-                summaryState.summarized = true;
 
-                const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
-                const liveStatus = getSummaryDrawer()?.querySelector('.qb-sum-status');
-                const liveActions = getSummaryDrawer()?.querySelector('.qb-sum-actions');
-                if (liveBody) {
-                    liveBody.dataset.raw = summaryState.outputRaw;
-                    liveBody.innerHTML = summaryState.outputHtml;
-                    liveBody.hidden = false;
-                }
-                if (liveStatus) liveStatus.textContent = summaryState.statusText;
-                if (liveActions) liveActions.hidden = false;
+            if (!streamRes.ok || !streamRes.body) {
+                throw new Error(`Stream failed: HTTP ${streamRes.status}`);
+            }
 
-                // Persist to cache so a page refresh restores this summary
-                // without re-running generation. videoId may have changed mid-flight
-                // (SPA nav) — write under the id we kicked off with.
-                try {
-                    await Storage.setSummary(videoId, {
-                        raw: summaryState.outputRaw,
-                        html: summaryState.outputHtml,
-                        statusText: summaryState.statusText,
-                        ts: Date.now(),
-                        model,
-                        title: tr.title || '',
-                    });
-                } catch {}
+            const reader = streamRes.body.getReader();
+            const decoder = new TextDecoder();
+            let sseBuffer = '';
 
-                // Toast + green ready badge on FAB only when drawer is closed.
-                if (!getSummaryDrawer()?.classList.contains('open')) {
-                    const label = tr.title ? `Summary ready · ${tr.title}` : 'Summary ready';
-                    showSummaryToast(label);
-                    getSummaryFab()?.classList.add('qb-sum-fab-ready');
-                }
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-                // Auto-read the summary on fresh generation when the combined
-                // auto-summarize + read toggle is on. Latched per videoId so
-                // observer reentries don't restart TTS mid-playback.
-                try {
-                    const s = await Storage.getSettings();
-                    if (s.autoSummarize && autoReadTriggeredFor !== videoId) {
-                        autoReadTriggeredFor = videoId;
-                        const ok = await readSummary();
-                        if (!ok) autoReadTriggeredFor = null;  // allow retry on failure
+                sseBuffer += decoder.decode(value, { stream: true });
+                const lines = sseBuffer.split('\n');
+                sseBuffer = lines.pop(); // hold incomplete line
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    let event;
+                    try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+                    // Token chunk — append and update visible text live
+                    if (event.text) {
+                        summaryState.outputRaw += event.text;
+                        const lb = getSummaryDrawer()?.querySelector('.qb-sum-body');
+                        if (lb) { lb.hidden = false; lb.textContent = summaryState.outputRaw; }
                     }
-                } catch {}
-            } else {
-                const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
-                const liveStatus = getSummaryDrawer()?.querySelector('.qb-sum-status');
-                if (liveBody) liveBody.textContent = `Error: ${data.error}`;
-                summaryState.statusText = '';
-                if (liveStatus) liveStatus.textContent = '';
+
+                    // Stream finished
+                    if (event.done) {
+                        if (!event.ok) throw new Error(event.error || 'stream error');
+
+                        summaryState.outputHtml = mdToHtml(summaryState.outputRaw);
+                        summaryState.statusText = `${model} · ${Math.round((event.elapsedMs ?? (Date.now() - t0)) / 100) / 10}s · ${tr.segments.length} segments`;
+                        summaryState.summarized = true;
+                        syncTtsFabState();
+                        playSummaryDoneSound();
+
+                        const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
+                        const liveStatus = getSummaryDrawer()?.querySelector('.qb-sum-status');
+                        const liveActions = getSummaryDrawer()?.querySelector('.qb-sum-actions');
+                        if (liveBody) {
+                            liveBody.dataset.raw = summaryState.outputRaw;
+                            liveBody.innerHTML = summaryState.outputHtml;
+                            liveBody.hidden = false;
+                        }
+                        if (liveStatus) liveStatus.textContent = summaryState.statusText;
+                        if (liveActions) liveActions.hidden = false;
+
+                        // Persist to cache
+                        try {
+                            await Storage.setSummary(videoId, {
+                                raw: summaryState.outputRaw,
+                                html: summaryState.outputHtml,
+                                statusText: summaryState.statusText,
+                                ts: Date.now(),
+                                model,
+                                title: tr.title || '',
+                            });
+                        } catch {}
+
+                        // Toast + green badge only when drawer is closed
+                        if (!getSummaryDrawer()?.classList.contains('open')) {
+                            const label = tr.title ? `Summary ready · ${tr.title}` : 'Summary ready';
+                            showSummaryToast(label);
+                            getSummaryFab()?.classList.add('qb-sum-fab-ready');
+                        }
+
+                        // Auto-read when toggle is on
+                        try {
+                            const s = await Storage.getSettings();
+                            if (s.autoSummarize && autoReadTriggeredFor !== videoId) {
+                                autoReadTriggeredFor = videoId;
+                                const ok = await readSummary();
+                                if (!ok) autoReadTriggeredFor = null;
+                            }
+                        } catch {}
+                    }
+
+                    // Non-fatal stream error event
+                    if (event.ok === false && event.error && !event.done) {
+                        throw new Error(event.error);
+                    }
+                }
             }
         } catch (e) {
             const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
@@ -848,6 +942,25 @@
         stopAudio();
         summaryState.ttsLoading = true;
         setReadButtonState(true);
+        syncTtsFabState();
+
+        // Check TTS audio cache (3-day TTL, up to 5 videos).
+        let cachedDataUrl = null;
+        try { cachedDataUrl = await Storage.getTtsAudio(summaryState.videoId); } catch { /* ignore */ }
+        if (cachedDataUrl) {
+            if (token !== summaryState.audioToken) {
+                summaryState.ttsLoading = false;
+                setReadButtonState(false);
+                syncTtsFabState();
+                return false;
+            }
+            summaryState.ttsLoading = false;
+            setReadButtonState(false);
+            syncTtsFabState();
+            playAudio(cachedDataUrl, token);
+            return true;
+        }
+
         mountPlayer('loading', 'Generating audio…');
 
         let res;
@@ -861,16 +974,21 @@
         if (token !== summaryState.audioToken) {
             summaryState.ttsLoading = false;
             setReadButtonState(false);
+            syncTtsFabState();
             return false;
         }
 
         summaryState.ttsLoading = false;
         setReadButtonState(false);
+        syncTtsFabState();
 
         if (!res?.ok || !res.dataUrl) {
             mountPlayer('error', `TTS failed: ${res?.error || 'unknown'}`);
             return false;
         }
+
+        // Persist audio for 3 days so re-reads skip Kokoro.
+        Storage.setTtsAudio(summaryState.videoId, res.dataUrl).catch(() => {});
 
         playAudio(res.dataUrl, token);
         return true;
@@ -907,7 +1025,16 @@
                         <path d="M6 5h4v14H6zm8 0h4v14h-4z"/>
                     </svg>
                 </button>
-                <button class="qb-sum-player-btn qb-sum-player-speed" type="button" aria-label="Playback speed" disabled>1x</button>
+                <div class="qb-sum-player-speed-wrap">
+                    <button class="qb-sum-player-btn qb-sum-player-speed" type="button" aria-label="Playback speed" disabled>1x</button>
+                    <div class="qb-sum-player-speed-menu" hidden>
+                        <button class="qb-sum-player-speed-option" data-rate="1">1x</button>
+                        <button class="qb-sum-player-speed-option" data-rate="1.25">1.25x</button>
+                        <button class="qb-sum-player-speed-option" data-rate="1.5">1.5x</button>
+                        <button class="qb-sum-player-speed-option" data-rate="1.75">1.75x</button>
+                        <button class="qb-sum-player-speed-option" data-rate="2">2x</button>
+                    </div>
+                </div>
                 <span class="qb-sum-player-label"></span>
                 <input class="qb-sum-player-seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek" disabled>
                 <span class="qb-sum-player-time">0:00 / 0:00</span>
@@ -922,7 +1049,11 @@
 
             el.querySelector('.qb-sum-player-play').addEventListener('click', togglePlayPause);
             el.querySelector('.qb-sum-player-close').addEventListener('click', closePlayer);
-            el.querySelector('.qb-sum-player-speed').addEventListener('click', cyclePlaybackSpeed);
+            el.querySelector('.qb-sum-player-speed').addEventListener('click', toggleSpeedMenu);
+            el.querySelectorAll('.qb-sum-player-speed-option').forEach(opt => {
+                opt.addEventListener('click', () => selectPlaybackSpeed(parseFloat(opt.dataset.rate)));
+            });
+            document.addEventListener('click', closeSpeedMenuOutside);
 
             const seek = el.querySelector('.qb-sum-player-seek');
             seek.addEventListener('input', () => {
@@ -930,8 +1061,9 @@
                 if (!audio || !isFinite(audio.duration)) return;
                 seek.dataset.seeking = '1';
                 const t = (seek.value / 1000) * audio.duration;
+                const spd = savedPlaybackRate;
                 el.querySelector('.qb-sum-player-time').textContent =
-                    `${fmtTime(t)} / ${fmtTime(audio.duration)}`;
+                    `${fmtTime(t / spd)} / ${fmtTime(audio.duration / spd)}`;
             });
             seek.addEventListener('change', () => {
                 const audio = summaryState.audio;
@@ -966,14 +1098,47 @@
         return `${Number(r).toString()}x`;
     }
 
-    function cyclePlaybackSpeed() {
-        const idx = PLAYBACK_RATES.indexOf(savedPlaybackRate);
-        savedPlaybackRate = PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length];
-        chrome.storage.local.set({ ttsPlaybackRate: savedPlaybackRate });
-        if (summaryState.audio) summaryState.audio.playbackRate = savedPlaybackRate;
+    function toggleSpeedMenu(e) {
+        e.stopPropagation();
         const el = getPlayerEl();
-        const btn = el?.querySelector('.qb-sum-player-speed');
-        if (btn) btn.textContent = formatRate(savedPlaybackRate);
+        if (!el) return;
+        const menu = el.querySelector('.qb-sum-player-speed-menu');
+        if (!menu) return;
+        menu.hidden = !menu.hidden;
+        if (!menu.hidden) {
+            menu.querySelectorAll('.qb-sum-player-speed-option').forEach(opt => {
+                opt.classList.toggle('active', parseFloat(opt.dataset.rate) === savedPlaybackRate);
+            });
+        }
+    }
+
+    function closeSpeedMenuOutside(e) {
+        const el = getPlayerEl();
+        if (!el) return;
+        const wrap = el.querySelector('.qb-sum-player-speed-wrap');
+        if (wrap && wrap.contains(e.target)) return;
+        const menu = el.querySelector('.qb-sum-player-speed-menu');
+        if (menu) menu.hidden = true;
+    }
+
+    function selectPlaybackSpeed(rate) {
+        savedPlaybackRate = rate;
+        chrome.storage.local.set({ ttsPlaybackRate: rate });
+        if (summaryState.audio) summaryState.audio.playbackRate = rate;
+        const el = getPlayerEl();
+        if (!el) return;
+        const btn = el.querySelector('.qb-sum-player-speed');
+        if (btn) btn.textContent = formatRate(rate);
+        // Update time display for new speed
+        const audio = summaryState.audio;
+        if (audio) {
+            const spd = rate;
+            el.querySelector('.qb-sum-player-time').textContent =
+                `${fmtTime(audio.currentTime / spd)} / ${fmtTime((audio.duration || 0) / spd)}`;
+        }
+        // Close menu
+        const menu = el.querySelector('.qb-sum-player-speed-menu');
+        if (menu) menu.hidden = true;
     }
 
     function setPlayPauseIcon(paused) {
@@ -994,8 +1159,9 @@
         audio.addEventListener('loadedmetadata', () => {
             const el = getPlayerEl();
             if (!el) return;
+            const spd = savedPlaybackRate;
             el.querySelector('.qb-sum-player-time').textContent =
-                `0:00 / ${fmtTime(audio.duration)}`;
+                `0:00 / ${fmtTime(audio.duration / spd)}`;
         });
         audio.addEventListener('timeupdate', () => {
             const el = getPlayerEl();
@@ -1004,19 +1170,22 @@
             if (seek.dataset.seeking !== '1' && isFinite(audio.duration) && audio.duration > 0) {
                 seek.value = Math.round((audio.currentTime / audio.duration) * 1000);
             }
+            const spd = savedPlaybackRate;
             el.querySelector('.qb-sum-player-time').textContent =
-                `${fmtTime(audio.currentTime)} / ${fmtTime(audio.duration || 0)}`;
+                `${fmtTime(audio.currentTime / spd)} / ${fmtTime((audio.duration || 0) / spd)}`;
         });
-        audio.addEventListener('play', () => { mountPlayer('playing', ''); setPlayPauseIcon(false); });
+        audio.addEventListener('play', () => { mountPlayer('playing', ''); setPlayPauseIcon(false); syncTtsFabState(); });
         audio.addEventListener('pause', () => {
             // 'pause' also fires when the audio ends — keep the player visible but
             // flip the icon.
             if (!audio.ended) { mountPlayer('paused', ''); }
             setPlayPauseIcon(true);
+            syncTtsFabState();
         });
         audio.addEventListener('ended', () => {
             mountPlayer('paused', 'Finished');
             setPlayPauseIcon(true);
+            syncTtsFabState();
             const el = getPlayerEl();
             if (el && isFinite(audio.duration)) {
                 el.querySelector('.qb-sum-player-seek').value = 1000;
@@ -1052,6 +1221,7 @@
         try { audio.pause(); } catch {}
         try { audio.src = ''; } catch {}
         summaryState.audio = null;
+        syncTtsFabState();
     }
 
     function closePlayer() {
@@ -1063,6 +1233,52 @@
         if (!el) return;
         el.classList.remove('show');
         setTimeout(() => el.remove(), 250);
+    }
+
+    // Pleasant "summary done" chime — ascending C-E-G-C major arpeggio with a
+    // soft bell timbre. Synthesized inline via Web Audio (no asset needed),
+    // styled after the browser-sounds presets.
+    let summaryAudioCtx = null;
+    function playSummaryDoneSound() {
+        try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            if (!summaryAudioCtx) summaryAudioCtx = new Ctx();
+            const ctx = summaryAudioCtx;
+            if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+            const t0 = ctx.currentTime;
+            const master = ctx.createGain();
+            master.gain.value = 0.22;
+            master.connect(ctx.destination);
+
+            const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
+            notes.forEach((freq, i) => {
+                const t = t0 + i * 0.09;
+                const g = ctx.createGain();
+                g.connect(master);
+                g.gain.setValueAtTime(0.0001, t);
+                g.gain.exponentialRampToValueAtTime(0.5, t + 0.012);
+                g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+
+                const osc = ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                osc.connect(g);
+
+                // Shimmer overtone an octave up, quieter.
+                const oscHi = ctx.createOscillator();
+                const gHi = ctx.createGain();
+                oscHi.type = 'triangle';
+                oscHi.frequency.value = freq * 2;
+                gHi.gain.value = 0.18;
+                oscHi.connect(gHi);
+                gHi.connect(g);
+
+                osc.start(t); oscHi.start(t);
+                osc.stop(t + 0.6); oscHi.stop(t + 0.6);
+            });
+        } catch {}
     }
 
     function showSummaryToast(label) {
@@ -1098,6 +1314,7 @@
     function removeSummaryUI() {
         document.getElementById(SUMMARY_PANEL_ID)?.remove();
         document.getElementById(SUMMARY_FAB_ID)?.remove();
+        document.getElementById(SUMMARY_TTS_FAB_ID)?.remove();
         dismissSummaryToast();
         closePlayer();
         summaryState.videoId = null;

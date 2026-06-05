@@ -83,7 +83,57 @@ body.quick-block-on-watch.quick-block-hide-search-watch ytd-masthead #center {
 /* Hide the FAB + drawer + toast while any element is in fullscreen */
 body.quick-block-fullscreen .qb-sum-root,
 body.quick-block-fullscreen #quick-block-summary-fab,
+body.quick-block-fullscreen #quick-block-tts-fab,
 body.quick-block-fullscreen #quick-block-summary-toast { display: none !important; }
+
+/* TTS FAB — speaker icon in masthead, sits left of the summary FAB */
+.qb-tts-fab {
+    position: relative !important;
+    top: 0 !important; right: 0 !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    color: var(--yt-spec-text-primary, #f1f1f1);
+    border: 1px solid transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    margin: 0 4px 0 0;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+.qb-tts-fab:hover {
+    background: rgba(255,255,255,0.10);
+    color: #fff;
+}
+.qb-tts-fab-icon { display: block; }
+
+/* Dimmed when no summary available yet */
+.qb-tts-fab.qb-tts-fab-disabled {
+    opacity: 0.30;
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Accent colour while audio is playing */
+.qb-tts-fab.qb-tts-fab-playing {
+    color: #6db4ff;
+}
+.qb-tts-fab.qb-tts-fab-playing:hover {
+    background: rgba(109,180,255,0.12);
+}
+
+/* Loading spinner — reuse the same spinner SVG/animation as the summary FAB */
+.qb-tts-fab.qb-tts-fab-loading .qb-sum-fab-spinner {
+    opacity: 1;
+    animation: qb-sum-spin 1.4s linear infinite;
+}
+.qb-tts-fab.qb-tts-fab-loading .qb-sum-fab-spinner-arc {
+    animation: qb-sum-arc 1.4s ease-in-out infinite;
+}
 
 .qb-sum-fab {
     position: fixed;
@@ -269,6 +319,54 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
     max-width: 60vw;
 }
 
+/* Rotating blue glow edge while the toast is alive. */
+#quick-block-summary-toast {
+    isolation: isolate;
+}
+#quick-block-summary-toast::before,
+#quick-block-summary-toast::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: conic-gradient(
+        from 0deg,
+        transparent 0deg,
+        #3a8bff 60deg,
+        #6db4ff 120deg,
+        #00e0ff 160deg,
+        transparent 220deg,
+        transparent 360deg
+    );
+    animation: qb-sum-edge-spin 2.4s linear infinite;
+}
+/* Crisp ring: mask out the interior, leaving a thin animated border. */
+#quick-block-summary-toast::after {
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    padding: 2px;
+}
+/* Soft outer bloom. */
+#quick-block-summary-toast::before {
+    inset: -6px;
+    filter: blur(9px);
+    opacity: 0.75;
+    z-index: -1;
+}
+@keyframes qb-sum-edge-spin {
+    to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+    #quick-block-summary-toast::before,
+    #quick-block-summary-toast::after {
+        animation: none;
+    }
+}
+
 @media (prefers-color-scheme: light) {
     #quick-block-summary-toast {
         background: rgba(255,255,255,0.98);
@@ -292,6 +390,7 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
     background: #181818;
     color: #f1f1f1;
     border-left: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px 0 0 16px;
     box-shadow: -8px 0 32px rgba(0,0,0,0.5);
     z-index: 10000;
     display: flex;
@@ -537,12 +636,55 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
 .qb-sum-player-btn[disabled]:hover { background: transparent; }
 .qb-sum-player-btn svg { display: block; }
 #qb-sum-player .hidden { display: none !important; }
+.qb-sum-player-speed-wrap {
+    position: relative;
+    display: inline-flex;
+}
 .qb-sum-player-speed {
     font-variant-numeric: tabular-nums;
     font-size: 12px;
     font-weight: 600;
     padding: 4px 8px;
     min-width: 36px;
+}
+.qb-sum-player-speed-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(24, 24, 24, 0.98);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 10002;
+    min-width: 80px;
+}
+.qb-sum-player-speed-menu[hidden] { display: none; }
+.qb-sum-player-speed-option {
+    background: transparent;
+    border: none;
+    color: #f1f1f1;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 20px;
+    cursor: pointer;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    transition: background 0.12s;
+}
+.qb-sum-player-speed-option:hover { background: rgba(255,255,255,0.10); }
+.qb-sum-player-speed-option.active { color: #2ecc71; font-weight: 700; }
+@media (prefers-color-scheme: light) {
+    .qb-sum-player-speed-menu {
+        background: rgba(255,255,255,0.98);
+        border-color: rgba(0,0,0,0.10);
+    }
+    .qb-sum-player-speed-option { color: #0f0f0f; }
+    .qb-sum-player-speed-option:hover { background: rgba(0,0,0,0.07); }
 }
 .qb-sum-player-seek {
     flex: 1;
