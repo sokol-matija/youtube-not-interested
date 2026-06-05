@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Quick Block — Settings</title>
+    <link rel="stylesheet" href="options.css">
+</head>
+<body>
+
+<div class="topbar">
+    <div class="topbar-dot"></div>
+    <h1>Quick Block</h1>
+    <span class="topbar-version" id="appVersion"></span>
+</div>
+
+<div class="layout">
+
+    <!-- Sidebar nav -->
+    <nav class="sidebar">
+        <button class="nav-item active" data-panel="general">General</button>
+        <button class="nav-item" data-panel="summary">Summary &amp; AI</button>
+        <button class="nav-item" data-panel="audio">Audio</button>
+        <button class="nav-item" data-panel="data">Data</button>
+        <button class="nav-item" data-panel="diagnostics">Diagnostics</button>
+    </nav>
+
+    <!-- Main panels -->
+    <main class="main">
+
+        <!-- ── General ── -->
+        <section class="panel active" id="panel-general">
+            <h2 class="panel-title">General</h2>
+
+            <div class="stat-strip">
+                <div class="stat-card">
+                    <div class="stat-label">Hidden Today</div>
+                    <div class="stat-value" id="hiddenToday">—</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Watch Later</div>
+                    <div class="stat-value" id="wlCount">—</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Hiding</div>
+                <div class="row">
+                    <div class="row-text">
+                        <span class="row-label">Hide Watch Later</span>
+                        <span class="row-hint">Mark videos in your Watch Later as Not Interested</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="hideToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Navigation</div>
+                <div class="row">
+                    <span class="row-label">Auto fullscreen</span>
+                    <label class="switch">
+                        <input type="checkbox" id="autoFsToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="row">
+                    <span class="row-label">Auto open comments</span>
+                    <label class="switch">
+                        <input type="checkbox" id="autoCommentsToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="row">
+                    <span class="row-label">Hide bottom comments</span>
+                    <label class="switch">
+                        <input type="checkbox" id="hideBottomCommentsToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="row">
+                    <span class="row-label">Hide search on watch page</span>
+                    <label class="switch">
+                        <input type="checkbox" id="hideSearchOnWatchToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Clutter</div>
+                <div class="row">
+                    <span class="row-label">Hide Share button</span>
+                    <label class="switch">
+                        <input type="checkbox" id="hideShareToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="row">
+                    <span class="row-label">Hide Thanks button</span>
+                    <label class="switch">
+                        <input type="checkbox" id="hideThanksToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Summary & AI ── -->
+        <section class="panel" id="panel-summary">
+            <h2 class="panel-title">Summary & AI</h2>
+
+            <div class="card">
+                <div class="card-header">Behaviour</div>
+                <div class="row">
+                    <div class="row-text">
+                        <span class="row-label">Auto summarize + read on open</span>
+                        <span class="row-hint">Summarizes and reads aloud when opening a video</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="autoSummarizeToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="row">
+                    <span class="row-label">Claude model</span>
+                    <select id="modelSelect">
+                        <option value="sonnet">Sonnet 4.6</option>
+                        <option value="haiku">Haiku 4.5</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Summary Profile</div>
+                <div class="row">
+                    <span class="row-label">Active profile</span>
+                    <select id="summaryProfileSelect"></select>
+                </div>
+                <div class="profile-editor-body">
+                    <input type="text" id="profileNameInput" placeholder="Profile name" maxlength="30">
+                    <textarea id="profilePromptText" rows="7" placeholder="Use {{title}}, {{duration}}, {{transcript}} as placeholders…"></textarea>
+                    <p class="profile-hint">Placeholders: {{title}} {{duration}} {{transcript}} — built-in profiles: prompt editable, name locked.</p>
+                    <div class="profile-actions">
+                        <button class="btn-sm btn-danger" id="deleteProfileBtn">Delete</button>
+                        <div class="profile-actions-right">
+                            <button class="btn-sm" id="newProfileBtn">+ New</button>
+                            <button class="btn-sm btn-accent" id="saveProfileBtn">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Audio ── -->
+        <section class="panel" id="panel-audio">
+            <h2 class="panel-title">Audio</h2>
+
+            <div class="card">
+                <div class="card-header">TTS Generation</div>
+                <div class="row">
+                    <div class="row-text">
+                        <span class="row-label">Pre-generate audio after summary</span>
+                        <span class="row-hint">Silently generates audio so playback starts instantly</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="autoTtsToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Karaoke</div>
+                <div class="row">
+                    <div class="row-text">
+                        <span class="row-label">Word highlight</span>
+                        <span class="row-hint">Shows current word in sync with audio playback</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="karaokeToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="row">
+                    <span class="row-label">Words shown</span>
+                    <select id="karaokeWordCountSelect">
+                        <option value="1">1</option>
+                        <option value="3">3</option>
+                        <option value="5">5</option>
+                        <option value="7">7</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Data ── -->
+        <section class="panel" id="panel-data">
+            <h2 class="panel-title">Data</h2>
+
+            <div class="card">
+                <div class="card-header">Watch Later Sync</div>
+                <div class="sync-body">
+                    <div class="sync-meta">
+                        <div><span id="wlCountSync">—</span> videos in Watch Later</div>
+                        <div class="sync-when" id="syncWhen">Never synced</div>
+                    </div>
+                    <button class="btn-primary" id="syncBtn">Sync now</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Import IDs</div>
+                <div class="import-body">
+                    <p class="hint">Paste video IDs (one per line) from <code>scripts/dump-wl-ids.sh</code></p>
+                    <textarea id="importText" placeholder="dQw4w9WgXcQ&#10;abc123..." rows="4"></textarea>
+                    <div class="import-actions">
+                        <label class="merge"><input type="checkbox" id="importMerge" checked> Merge with existing</label>
+                        <button class="btn-primary" id="importBtn">Import</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Recently Hidden</div>
+                <ul id="recentList" class="recent-list"></ul>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Danger Zone</div>
+                <div class="danger-row">
+                    <div class="danger-row-text">
+                        <div class="danger-row-label">Clear all data</div>
+                        <div class="danger-row-hint">Removes Watch Later list, history, and settings</div>
+                    </div>
+                    <button class="btn-sm btn-danger" id="clearBtn">Clear data</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Diagnostics ── -->
+        <section class="panel" id="panel-diagnostics">
+            <h2 class="panel-title">Diagnostics</h2>
+
+            <div class="card">
+                <div class="card-header">Bridge</div>
+                <div class="health-row" id="healthRow">
+                    <span class="health-dot" id="healthDot"></span>
+                    <span class="health-label">Local Claude bridge</span>
+                    <span class="health-status" id="healthStatus">checking…</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Tests</div>
+                <div class="diag-body">
+                    <p class="hint">Run <code>node scripts/claude-bridge.mjs</code> to start the bridge.</p>
+                    <div class="model-row">
+                        <label for="diagModelSelect">Model</label>
+                        <select id="diagModelSelect">
+                            <option value="sonnet">Sonnet 4.6</option>
+                            <option value="haiku">Haiku 4.5</option>
+                        </select>
+                    </div>
+                    <button class="btn-primary" id="transcriptTestBtn">Test transcript → clipboard</button>
+                    <button class="btn-primary" id="claudeTestBtn">Test Claude: what's today's date?</button>
+                    <pre id="claudeTestOut" class="claude-out" hidden></pre>
+                    <button class="btn-primary" id="claudeCopyBtn" hidden>Copy output</button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="lib/storage.js" defer></script>
+<script src="lib/bridge.js" defer></script>
+<script src="options.js" defer></script>
+</body>
+</html>
