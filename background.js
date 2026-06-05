@@ -6,7 +6,9 @@ importScripts('lib/storage.js');
 
 const SYNC_ALARM = 'wl-sync';
 const SYNC_PERIOD_MIN = 360;
-const KOKORO_URL = 'http://sokol.falcon-parore.ts.net:8880/v1/audio/speech';
+const KOKORO_BASE = 'http://sokol.falcon-parore.ts.net:8880';
+const KOKORO_URL = `${KOKORO_BASE}/v1/audio/speech`;
+const KOKORO_CAPTIONED_URL = `${KOKORO_BASE}/dev/captioned_speech`;
 const KOKORO_VOICE = 'af_sky';
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -37,6 +39,38 @@ async function ttsGenerate(text) {
     if (!text || typeof text !== 'string') {
         return { ok: false, error: 'empty text' };
     }
+    // Preferred path: captioned endpoint returns base64 audio + per-word
+    // timestamps (used to drive the karaoke pill). JSON body, not a blob.
+    try {
+        const r = await fetch(KOKORO_CAPTIONED_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'kokoro',
+                input: text,
+                voice: KOKORO_VOICE,
+                response_format: 'mp3',
+                stream: false,
+                return_timestamps: true,
+            }),
+        });
+        if (r.ok) {
+            const data = await r.json();
+            if (data?.audio) {
+                const fmt = data.audio_format || 'audio/mpeg';
+                return {
+                    ok: true,
+                    dataUrl: `data:${fmt};base64,${data.audio}`,
+                    timestamps: Array.isArray(data.timestamps) ? data.timestamps : null,
+                };
+            }
+        }
+        // Non-OK / no audio → fall through to the plain endpoint below.
+    } catch {
+        // Network error on captioned — try the plain endpoint before failing.
+    }
+
+    // Fallback: plain speech (mp3 blob, no timestamps → no karaoke).
     try {
         const r = await fetch(KOKORO_URL, {
             method: 'POST',
@@ -52,7 +86,7 @@ async function ttsGenerate(text) {
         const blob = await r.blob();
         const reader = new FileReader();
         return await new Promise(resolve => {
-            reader.onload = () => resolve({ ok: true, dataUrl: reader.result });
+            reader.onload = () => resolve({ ok: true, dataUrl: reader.result, timestamps: null });
             reader.onerror = () => resolve({ ok: false, error: 'blob read failed' });
             reader.readAsDataURL(blob);
         });

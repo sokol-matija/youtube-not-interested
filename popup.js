@@ -139,6 +139,8 @@ async function render() {
     $('#hideThanksToggle').checked = !!settings.hideThanksButton;
     $('#hideSearchOnWatchToggle').checked = !!settings.hideSearchOnWatch;
     $('#autoSummarizeToggle').checked = !!settings.autoSummarize;
+    $('#karaokeToggle').checked = settings.karaokeEnabled !== false;
+    $('#karaokeWordCountSelect').value = String(settings.karaokeWordCount || 3);
     $('#modelSelect').value = settings.claudeModel || 'sonnet';
 
     await loadProfiles();
@@ -210,6 +212,14 @@ $('#hideSearchOnWatchToggle').addEventListener('change', async (e) => {
 
 $('#autoSummarizeToggle').addEventListener('change', async (e) => {
     await Storage.setSettings({ autoSummarize: e.target.checked });
+});
+
+$('#karaokeToggle').addEventListener('change', async (e) => {
+    await Storage.setSettings({ karaokeEnabled: e.target.checked });
+});
+
+$('#karaokeWordCountSelect').addEventListener('change', async (e) => {
+    await Storage.setSettings({ karaokeWordCount: parseInt(e.target.value, 10) || 3 });
 });
 
 $('#syncBtn').addEventListener('click', async () => {

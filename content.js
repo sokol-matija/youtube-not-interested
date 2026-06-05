@@ -18,6 +18,8 @@
 
     let wlIds = new Set();
     let hideEnabled = true;
+    let karaokeEnabled = true;
+    let karaokeWordCount = 3;
     const sessionRestored = new Set(); // IDs user restored this session
     let lastMenuVideoElement = null;    // for capturing "Save to Watch later" clicks
 
@@ -215,6 +217,15 @@
             applyShareToggle(newSettings.hideShareButton);
             applyThanksToggle(newSettings.hideThanksButton);
             applySearchOnWatchToggle(newSettings.hideSearchOnWatch);
+
+            // Karaoke settings can change while audio is playing — apply live.
+            karaokeEnabled = newSettings.karaokeEnabled !== false;
+            const newCount = normalizeWordCount(newSettings.karaokeWordCount);
+            const countChanged = newCount !== karaokeWordCount;
+            karaokeWordCount = newCount;
+            if (typeof applyKaraokeSettings === 'function') {
+                applyKaraokeSettings(countChanged);
+            }
         }
     });
 
@@ -406,6 +417,8 @@
     const SUMMARY_FAB_ID = 'quick-block-summary-fab';
     const SUMMARY_TOAST_ID = 'quick-block-summary-toast';
     const SUMMARY_PLAYER_ID = 'qb-sum-player';
+    const KARAOKE_ID = 'qb-karaoke';
+    const CLUSTER_TOGGLE_ID = 'qb-cluster-toggle';
     const SUMMARY_TTS_FAB_ID = 'quick-block-tts-fab';
     const bridgeUrl = (path) => self.QuickBlockBridge.bridgeUrl(path);
 
@@ -422,6 +435,14 @@
         ttsLoading: false,
         audio: null,
         audioToken: 0,
+        timestamps: null,    // raw [{word,start_time,end_time}] from Kokoro
+        words: [],           // normalized [{text,start,end}] for karaoke
+        curWordIdx: -1,
+        clusterHidden: false, // chip: player + karaoke hidden (audio plays on)
+        karaokeHidden: false, // "A" button: karaoke box only hidden
+        karaokeEnabled: true, // from settings
+        karaokeWordCount: 3,  // from settings (odd → balanced sides)
+        _playerRO: null,      // ResizeObserver keeping karaoke at 70% of player
     };
 
     // Minimal markdown→HTML for summary output. Escapes HTML first to prevent
@@ -672,6 +693,7 @@
                 <circle class="qb-sum-fab-spinner-track" cx="18" cy="18" r="15"/>
                 <circle class="qb-sum-fab-spinner-arc" cx="18" cy="18" r="15"/>
             </svg>
+            <span class="qb-beam-bloom" aria-hidden="true"></span>
         `;
 
         // Insert immediately left of the summary FAB
@@ -805,106 +827,71 @@
         summaryState.statusText = `Summarizing with ${model}…`;
         summaryState.outputRaw = '';
         if (status) status.textContent = summaryState.statusText;
-        // Show body immediately so streaming text appears as it arrives
-        if (body) { body.hidden = false; body.textContent = ''; }
+        // Placeholder until the full summary returns (no streaming).
+        if (body) { body.hidden = false; body.textContent = 'Summarizing…'; }
 
         try {
             const t0 = Date.now();
-            const streamRes = await fetch(await bridgeUrl('/run-stream'), {
+            const res = await fetch(await bridgeUrl('/run'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt, model }),
             });
-
-            if (!streamRes.ok || !streamRes.body) {
-                throw new Error(`Stream failed: HTTP ${streamRes.status}`);
+            const data = await res.json();
+            if (!res.ok || !data.ok) {
+                throw new Error(data.error || `HTTP ${res.status}`);
             }
 
-            const reader = streamRes.body.getReader();
-            const decoder = new TextDecoder();
-            let sseBuffer = '';
+            summaryState.outputRaw = data.output || '';
+            summaryState.outputHtml = mdToHtml(summaryState.outputRaw);
+            summaryState.statusText = `${model} · ${Math.round((data.elapsedMs ?? (Date.now() - t0)) / 100) / 10}s · ${tr.segments.length} segments`;
+            summaryState.summarized = true;
+            syncTtsFabState();
+            playSummaryDoneSound();
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+            const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
+            const liveStatus = getSummaryDrawer()?.querySelector('.qb-sum-status');
+            const liveActions = getSummaryDrawer()?.querySelector('.qb-sum-actions');
+            if (liveBody) {
+                liveBody.dataset.raw = summaryState.outputRaw;
+                liveBody.innerHTML = summaryState.outputHtml;
+                liveBody.hidden = false;
+            }
+            if (liveStatus) liveStatus.textContent = summaryState.statusText;
+            if (liveActions) liveActions.hidden = false;
 
-                sseBuffer += decoder.decode(value, { stream: true });
-                const lines = sseBuffer.split('\n');
-                sseBuffer = lines.pop(); // hold incomplete line
+            // Persist to cache
+            try {
+                await Storage.setSummary(videoId, {
+                    raw: summaryState.outputRaw,
+                    html: summaryState.outputHtml,
+                    statusText: summaryState.statusText,
+                    ts: Date.now(),
+                    model,
+                    title: tr.title || '',
+                });
+            } catch {}
 
-                for (const line of lines) {
-                    if (!line.startsWith('data: ')) continue;
-                    let event;
-                    try { event = JSON.parse(line.slice(6)); } catch { continue; }
+            // Toast + green badge only when drawer is closed
+            if (!getSummaryDrawer()?.classList.contains('open')) {
+                const label = tr.title ? `Summary ready · ${tr.title}` : 'Summary ready';
+                showSummaryToast(label);
+                getSummaryFab()?.classList.add('qb-sum-fab-ready');
+            }
 
-                    // Token chunk — append and update visible text live
-                    if (event.text) {
-                        summaryState.outputRaw += event.text;
-                        const lb = getSummaryDrawer()?.querySelector('.qb-sum-body');
-                        if (lb) { lb.hidden = false; lb.textContent = summaryState.outputRaw; }
-                    }
-
-                    // Stream finished
-                    if (event.done) {
-                        if (!event.ok) throw new Error(event.error || 'stream error');
-
-                        summaryState.outputHtml = mdToHtml(summaryState.outputRaw);
-                        summaryState.statusText = `${model} · ${Math.round((event.elapsedMs ?? (Date.now() - t0)) / 100) / 10}s · ${tr.segments.length} segments`;
-                        summaryState.summarized = true;
-                        syncTtsFabState();
-                        playSummaryDoneSound();
-
-                        const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
-                        const liveStatus = getSummaryDrawer()?.querySelector('.qb-sum-status');
-                        const liveActions = getSummaryDrawer()?.querySelector('.qb-sum-actions');
-                        if (liveBody) {
-                            liveBody.dataset.raw = summaryState.outputRaw;
-                            liveBody.innerHTML = summaryState.outputHtml;
-                            liveBody.hidden = false;
-                        }
-                        if (liveStatus) liveStatus.textContent = summaryState.statusText;
-                        if (liveActions) liveActions.hidden = false;
-
-                        // Persist to cache
-                        try {
-                            await Storage.setSummary(videoId, {
-                                raw: summaryState.outputRaw,
-                                html: summaryState.outputHtml,
-                                statusText: summaryState.statusText,
-                                ts: Date.now(),
-                                model,
-                                title: tr.title || '',
-                            });
-                        } catch {}
-
-                        // Toast + green badge only when drawer is closed
-                        if (!getSummaryDrawer()?.classList.contains('open')) {
-                            const label = tr.title ? `Summary ready · ${tr.title}` : 'Summary ready';
-                            showSummaryToast(label);
-                            getSummaryFab()?.classList.add('qb-sum-fab-ready');
-                        }
-
-                        // Auto-read when toggle is on
-                        try {
-                            const s = await Storage.getSettings();
-                            if (s.autoSummarize && autoReadTriggeredFor !== videoId) {
-                                autoReadTriggeredFor = videoId;
-                                const ok = await readSummary();
-                                if (!ok) autoReadTriggeredFor = null;
-                            }
-                        } catch {}
-                    }
-
-                    // Non-fatal stream error event
-                    if (event.ok === false && event.error && !event.done) {
-                        throw new Error(event.error);
-                    }
+            // Auto-read when toggle is on
+            try {
+                const s = await Storage.getSettings();
+                if (s.autoSummarize && autoReadTriggeredFor !== videoId) {
+                    autoReadTriggeredFor = videoId;
+                    const ok = await readSummary();
+                    if (!ok) autoReadTriggeredFor = null;
                 }
-            }
+            } catch {}
         } catch (e) {
             const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
             const liveStatus = getSummaryDrawer()?.querySelector('.qb-sum-status');
-            if (liveBody) liveBody.textContent = `Bridge unreachable. Start it:\n  node scripts/claude-bridge.mjs`;
+            if (liveBody) liveBody.textContent = `Summary failed: ${e.message}\n\nIf the bridge isn't running, start it:\n  node scripts/claude-bridge.mjs`;
             summaryState.statusText = '';
             if (liveStatus) liveStatus.textContent = '';
         } finally {
@@ -946,9 +933,9 @@
         syncTtsFabState();
 
         // Check TTS audio cache (3-day TTL, up to 5 videos).
-        let cachedDataUrl = null;
-        try { cachedDataUrl = await Storage.getTtsAudio(summaryState.videoId); } catch { /* ignore */ }
-        if (cachedDataUrl) {
+        let cached = null;
+        try { cached = await Storage.getTtsAudio(summaryState.videoId); } catch { /* ignore */ }
+        if (cached?.dataUrl) {
             if (token !== summaryState.audioToken) {
                 summaryState.ttsLoading = false;
                 setReadButtonState(false);
@@ -958,7 +945,8 @@
             summaryState.ttsLoading = false;
             setReadButtonState(false);
             syncTtsFabState();
-            playAudio(cachedDataUrl, token);
+            summaryState.timestamps = cached.timestamps || null;
+            playAudio(cached.dataUrl, token);
             return true;
         }
 
@@ -988,8 +976,10 @@
             return false;
         }
 
-        // Persist audio for 3 days so re-reads skip Kokoro.
-        Storage.setTtsAudio(summaryState.videoId, res.dataUrl).catch(() => {});
+        summaryState.timestamps = res.timestamps || null;
+
+        // Persist audio + timestamps for 3 days so re-reads skip Kokoro.
+        Storage.setTtsAudio(summaryState.videoId, res.dataUrl, res.timestamps).catch(() => {});
 
         playAudio(res.dataUrl, token);
         return true;
@@ -1036,6 +1026,7 @@
                         <button class="qb-sum-player-speed-option" data-rate="2">2x</button>
                     </div>
                 </div>
+                <button class="qb-sum-player-btn qb-sum-player-kara" type="button" aria-label="Toggle karaoke" title="Hide karaoke" style="display:none">A</button>
                 <span class="qb-sum-player-label"></span>
                 <input class="qb-sum-player-seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek" disabled>
                 <span class="qb-sum-player-time">0:00 / 0:00</span>
@@ -1045,6 +1036,7 @@
                         <line x1="6" y1="6" x2="18" y2="18"/>
                     </svg>
                 </button>
+                <span class="qb-beam-bloom" aria-hidden="true"></span>
             `;
             document.body.appendChild(el);
 
@@ -1054,6 +1046,7 @@
             el.querySelectorAll('.qb-sum-player-speed-option').forEach(opt => {
                 opt.addEventListener('click', () => selectPlaybackSpeed(parseFloat(opt.dataset.rate)));
             });
+            el.querySelector('.qb-sum-player-kara').addEventListener('click', toggleKaraokeBox);
             document.addEventListener('click', closeSpeedMenuOutside);
 
             const seek = el.querySelector('.qb-sum-player-seek');
@@ -1157,6 +1150,18 @@
         mountPlayer('playing', '');
         setPlayPauseIcon(false);
 
+        // Karaoke: build the word list from timestamps (if Kokoro returned any)
+        // and mount the pill above the player. The cluster toggle mounts either
+        // way so the player can still be hidden without timestamps.
+        summaryState.karaokeEnabled = karaokeEnabled;
+        summaryState.karaokeWordCount = karaokeWordCount;
+        summaryState.karaokeHidden = false;
+        summaryState.words = buildKaraokeWords(summaryState.timestamps);
+        summaryState.curWordIdx = -1;
+        if (summaryState.words.length && karaokeEnabled) mountKaraoke();
+        else removeKaraokeEl();
+        mountClusterToggle();
+
         audio.addEventListener('loadedmetadata', () => {
             const el = getPlayerEl();
             if (!el) return;
@@ -1174,6 +1179,11 @@
             const spd = savedPlaybackRate;
             el.querySelector('.qb-sum-player-time').textContent =
                 `${fmtTime(audio.currentTime / spd)} / ${fmtTime((audio.duration || 0) / spd)}`;
+        });
+        // Karaoke runs on its own listener so it keeps syncing even when the
+        // player pill is hidden via the cluster toggle.
+        audio.addEventListener('timeupdate', () => {
+            if (summaryState.words.length) updateKaraoke(audio.currentTime);
         });
         audio.addEventListener('play', () => { mountPlayer('playing', ''); setPlayPauseIcon(false); syncTtsFabState(); });
         audio.addEventListener('pause', () => {
@@ -1230,10 +1240,217 @@
         summaryState.ttsLoading = false;
         setReadButtonState(false);
         stopAudio();
+        closeKaraoke();
+        closeClusterToggle();
         const el = getPlayerEl();
         if (!el) return;
         el.classList.remove('show');
         setTimeout(() => el.remove(), 250);
+    }
+
+    // ── Karaoke pill: N rolling words centered on the current one (pastel red),
+    // word-level sync to Kokoro timestamps. Fixed width (~70% of player). Word
+    // count + on/off come from settings. ─────────────────────────────────────
+
+    function getKaraokeEl() { return document.getElementById(KARAOKE_ID); }
+    function getClusterToggleEl() { return document.getElementById(CLUSTER_TOGGLE_ID); }
+
+    // Clamp word count to an odd number in [1,9] so the current word stays
+    // centered with balanced sides.
+    function normalizeWordCount(n) {
+        let v = Math.floor(Number(n));
+        if (!Number.isFinite(v) || v < 1) v = 3;
+        if (v > 9) v = 9;
+        if (v % 2 === 0) v += 1;
+        return v;
+    }
+
+    function karaokeSideCount() {
+        return Math.max(0, (normalizeWordCount(summaryState.karaokeWordCount) - 1) / 2);
+    }
+
+    // Normalize Kokoro timestamps into display words: standalone punctuation
+    // tokens (",", ".", "?"…) are glued onto the previous word so the karaoke
+    // shows real words, not lone punctuation.
+    function buildKaraokeWords(timestamps) {
+        if (!Array.isArray(timestamps)) return [];
+        const out = [];
+        const isPunct = (s) => /^[^\p{L}\p{N}]+$/u.test(s);
+        for (const t of timestamps) {
+            const w = (t?.word ?? '').trim();
+            if (!w) continue;
+            const start = Number(t.start_time) || 0;
+            const end = Number(t.end_time) || start;
+            if (isPunct(w) && out.length) {
+                out[out.length - 1].text += w;
+                out[out.length - 1].end = end;
+            } else {
+                out.push({ text: w, start, end });
+            }
+        }
+        return out;
+    }
+
+    // First word whose end time is past t (i.e. the one being / about to be
+    // spoken). Clamps to the first word before audio reaches it.
+    function findWordIdx(words, t) {
+        if (!words.length) return -1;
+        if (t < words[0].start) return 0;
+        for (let i = 0; i < words.length; i++) {
+            if (t < words[i].end) return i;
+        }
+        return words.length - 1;
+    }
+
+    function mountKaraoke() {
+        if (!summaryState.words.length || !summaryState.karaokeEnabled) return;
+        let el = getKaraokeEl();
+        if (!el) {
+            el = document.createElement('div');
+            el.id = KARAOKE_ID;
+            document.body.appendChild(el);
+            requestAnimationFrame(() => el.classList.add('show'));
+        }
+        // (Re)build slots for the configured word count; middle slot = current.
+        const side = karaokeSideCount();
+        let html = '';
+        for (let off = -side; off <= side; off++) {
+            const cls = off === 0 ? 'qb-kara-word qb-kara-cur' : 'qb-kara-word qb-kara-side';
+            html += `<span class="${cls}" data-off="${off}"></span>`;
+        }
+        el.innerHTML = html;
+        summaryState.curWordIdx = -1;
+        sizeKaraoke();
+        updateKaraoke(summaryState.audio?.currentTime || 0);
+        applyClusterVisibility();
+    }
+
+    // Pin width to ~70% of the player so words don't grow/shrink the box.
+    function sizeKaraoke() {
+        const el = getKaraokeEl();
+        const player = getPlayerEl();
+        if (!el || !player) return;
+        const pw = player.getBoundingClientRect().width;
+        if (pw > 0) el.style.width = Math.round(pw * 0.7) + 'px';
+        if (!summaryState._playerRO && 'ResizeObserver' in window) {
+            summaryState._playerRO = new ResizeObserver(() => sizeKaraoke());
+            summaryState._playerRO.observe(player);
+        }
+    }
+
+    function updateKaraoke(t) {
+        const words = summaryState.words;
+        const el = getKaraokeEl();
+        if (!words.length || !el) return;
+        const idx = findWordIdx(words, t);
+        if (idx === summaryState.curWordIdx) return;   // word-level: change only
+        summaryState.curWordIdx = idx;
+        el.querySelectorAll('.qb-kara-word').forEach(span => {
+            const wi = idx + (Number(span.dataset.off) || 0);
+            span.textContent = (wi >= 0 && wi < words.length) ? words[wi].text : '';
+        });
+    }
+
+    // Remove the karaoke DOM element + resize observer but KEEP the word list,
+    // so toggling the feature back on can re-render without a re-fetch.
+    function removeKaraokeEl() {
+        const el = getKaraokeEl();
+        if (el) {
+            el.classList.remove('show');
+            setTimeout(() => el.remove(), 200);
+        }
+        if (summaryState._playerRO) {
+            summaryState._playerRO.disconnect();
+            summaryState._playerRO = null;
+        }
+        summaryState.curWordIdx = -1;
+    }
+
+    // Full teardown when the player itself closes.
+    function closeKaraoke() {
+        removeKaraokeEl();
+        summaryState.words = [];
+        summaryState.karaokeHidden = false;
+    }
+
+    // Re-apply enable/word-count live (settings changed mid-playback).
+    function applyKaraokeSettings() {
+        summaryState.karaokeEnabled = karaokeEnabled;
+        summaryState.karaokeWordCount = karaokeWordCount;
+        if (!summaryState.audio) return;
+        if (karaokeEnabled && summaryState.words.length) mountKaraoke();
+        else removeKaraokeEl();
+        applyClusterVisibility();
+    }
+
+    // ── Hide/show controls ───────────────────────────────────────────────────
+    // Chip  → clusterHidden: hides BOTH player + karaoke (audio plays on).
+    // "A"   → karaokeHidden: hides ONLY the karaoke box.
+
+    function mountClusterToggle() {
+        if (getClusterToggleEl()) { applyClusterVisibility(); return; }
+        const btn = document.createElement('button');
+        btn.id = CLUSTER_TOGGLE_ID;
+        btn.type = 'button';
+        btn.className = 'qb-cluster-toggle';
+        btn.innerHTML = `
+            <svg class="qb-cluster-toggle-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        `;
+        document.body.appendChild(btn);
+        btn.addEventListener('click', toggleCluster);
+        requestAnimationFrame(() => btn.classList.add('show'));
+        applyClusterVisibility();
+    }
+
+    function toggleCluster() {
+        summaryState.clusterHidden = !summaryState.clusterHidden;
+        applyClusterVisibility();
+    }
+
+    function toggleKaraokeBox() {
+        summaryState.karaokeHidden = !summaryState.karaokeHidden;
+        applyClusterVisibility();
+    }
+
+    // Single source of truth for player + karaoke + chip + "A" button states.
+    function applyClusterVisibility() {
+        const hideAll = summaryState.clusterHidden;
+        getPlayerEl()?.classList.toggle('qb-cluster-hidden', hideAll);
+
+        const showKara = summaryState.karaokeEnabled
+            && summaryState.words.length > 0
+            && !hideAll
+            && !summaryState.karaokeHidden;
+        getKaraokeEl()?.classList.toggle('qb-kara-off', !showKara);
+
+        const chip = getClusterToggleEl();
+        if (chip) {
+            chip.classList.toggle('collapsed', hideAll);
+            const label = hideAll ? 'Show player' : 'Hide player';
+            chip.setAttribute('aria-label', label);
+            chip.title = label;
+        }
+
+        const aBtn = getPlayerEl()?.querySelector('.qb-sum-player-kara');
+        if (aBtn) {
+            const available = summaryState.karaokeEnabled && summaryState.words.length > 0;
+            aBtn.style.display = available ? '' : 'none';
+            aBtn.classList.toggle('active', available && !summaryState.karaokeHidden);
+            const label = summaryState.karaokeHidden ? 'Show karaoke' : 'Hide karaoke';
+            aBtn.setAttribute('aria-label', label);
+            aBtn.title = label;
+        }
+    }
+
+    function closeClusterToggle() {
+        const btn = getClusterToggleEl();
+        if (btn) {
+            btn.classList.remove('show');
+            setTimeout(() => btn.remove(), 200);
+        }
+        summaryState.clusterHidden = false;
     }
 
     // Pleasant "summary done" chime — ascending C-E-G-C major arpeggio with a
@@ -1357,6 +1574,8 @@
         wlIds = await Storage.getWlIds();
         const settings = await Storage.getSettings();
         hideEnabled = settings.hideEnabled !== false;
+        karaokeEnabled = settings.karaokeEnabled !== false;
+        karaokeWordCount = normalizeWordCount(settings.karaokeWordCount);
         applyBottomCommentsToggle(settings.hideBottomComments);
         applyShareToggle(settings.hideShareButton);
         applyThanksToggle(settings.hideThanksButton);
