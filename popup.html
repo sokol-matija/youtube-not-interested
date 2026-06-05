@@ -80,6 +80,29 @@
             </label>
         </section>
 
+        <section class="row profile-row">
+            <label class="row-label" for="summaryProfileSelect">Summary profile</label>
+            <select id="summaryProfileSelect"></select>
+        </section>
+
+        <section class="profile-editor">
+            <details>
+                <summary>Edit profile prompt</summary>
+                <div class="profile-editor-body">
+                    <input type="text" id="profileNameInput" placeholder="Profile name" maxlength="30">
+                    <textarea id="profilePromptText" rows="7" placeholder="Use {{title}}, {{duration}}, {{transcript}} as placeholders…"></textarea>
+                    <p class="profile-hint">Placeholders: {{title}} {{duration}} {{transcript}} — builtins: prompt editable, name locked.</p>
+                    <div class="profile-editor-actions">
+                        <button class="btn-sm btn-danger" id="deleteProfileBtn">Delete</button>
+                        <div class="profile-editor-right">
+                            <button class="btn-sm" id="newProfileBtn">+ New</button>
+                            <button class="btn-sm btn-accent" id="saveProfileBtn">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </section>
+
         <section class="sync">
             <div class="sync-meta">
                 <div><span id="wlCount">—</span> in Watch Later</div>

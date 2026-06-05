@@ -27,6 +27,98 @@ function showToast(msg) {
     setTimeout(() => el.classList.remove('show'), 1800);
 }
 
+// ── Summary profiles ──────────────────────────────────────────────────────────
+
+async function loadProfiles() {
+    const [profiles, settings] = await Promise.all([
+        Storage.getSummaryProfiles(),
+        Storage.getSettings(),
+    ]);
+    const activeId = settings.activeSummaryProfileId || 'standard';
+    const sel = $('#summaryProfileSelect');
+    sel.innerHTML = '';
+    for (const p of profiles) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        if (p.id === activeId) opt.selected = true;
+        sel.appendChild(opt);
+    }
+    renderProfileEditor(profiles, activeId);
+}
+
+function renderProfileEditor(profiles, activeId) {
+    const profile = profiles.find(p => p.id === activeId) || profiles[0];
+    if (!profile) return;
+    $('#profileNameInput').value = profile.name;
+    $('#profileNameInput').disabled = !!profile.builtin;
+    $('#profilePromptText').value = profile.prompt;
+    $('#deleteProfileBtn').disabled = !!profile.builtin;
+}
+
+$('#summaryProfileSelect').addEventListener('change', async (e) => {
+    const newId = e.target.value;
+    await Storage.setSettings({ activeSummaryProfileId: newId });
+    const profiles = await Storage.getSummaryProfiles();
+    renderProfileEditor(profiles, newId);
+});
+
+$('#saveProfileBtn').addEventListener('click', async () => {
+    const activeId = $('#summaryProfileSelect').value;
+    const profiles = await Storage.getSummaryProfiles();
+    const idx = profiles.findIndex(p => p.id === activeId);
+    if (idx === -1) return;
+    const updated = { ...profiles[idx] };
+    const newPrompt = $('#profilePromptText').value.trim();
+    if (!newPrompt) { showToast('Prompt cannot be empty'); return; }
+    updated.prompt = newPrompt;
+    if (!updated.builtin) {
+        const newName = $('#profileNameInput').value.trim();
+        if (newName) updated.name = newName;
+    }
+    profiles[idx] = updated;
+    await Storage.setSummaryProfiles(profiles);
+    showToast('Profile saved');
+    await loadProfiles();
+});
+
+$('#deleteProfileBtn').addEventListener('click', async () => {
+    const activeId = $('#summaryProfileSelect').value;
+    const profiles = await Storage.getSummaryProfiles();
+    const profile = profiles.find(p => p.id === activeId);
+    if (!profile || profile.builtin) return;
+    if (!confirm(`Delete profile "${profile.name}"?`)) return;
+    const updated = profiles.filter(p => p.id !== activeId);
+    await Storage.setSummaryProfiles(updated);
+    await Storage.setSettings({ activeSummaryProfileId: 'standard' });
+    showToast('Profile deleted');
+    await loadProfiles();
+});
+
+$('#newProfileBtn').addEventListener('click', async () => {
+    const profiles = await Storage.getSummaryProfiles();
+    const id = 'custom-' + Date.now();
+    profiles.push({
+        id,
+        name: 'Custom',
+        builtin: false,
+        prompt: [
+            `Summarize this video.`,
+            ``,
+            `Title: {{title}}`,
+            ``,
+            `Transcript:`,
+            `{{transcript}}`,
+        ].join('\n'),
+    });
+    await Storage.setSummaryProfiles(profiles);
+    await Storage.setSettings({ activeSummaryProfileId: id });
+    showToast('New profile created — edit and save');
+    await loadProfiles();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function render() {
     const [{ size: wlCount }, settings, lastSync, today, recent] = await Promise.all([
         Storage.getWlIds().then(s => ({ size: s.size })),
@@ -48,6 +140,8 @@ async function render() {
     $('#hideSearchOnWatchToggle').checked = !!settings.hideSearchOnWatch;
     $('#autoSummarizeToggle').checked = !!settings.autoSummarize;
     $('#modelSelect').value = settings.claudeModel || 'sonnet';
+
+    await loadProfiles();
 
     const list = $('#recentList');
     list.innerHTML = '';
