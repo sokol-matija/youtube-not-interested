@@ -529,11 +529,11 @@
         summaryState.summarized = true;
         syncTtsFabState();
 
-        // When the combined auto-summarize toggle is on, a cached entry should
-        // still trigger TTS — user opened the page expecting it to play.
+        // When either auto-toggle is on, a cached entry should still trigger TTS —
+        // user opened the page expecting it to play.
         try {
             const s = await Storage.getSettings();
-            if (s.autoSummarize && autoReadTriggeredFor !== videoId) {
+            if ((s.autoSummarize || s.autoTts) && autoReadTriggeredFor !== videoId) {
                 autoReadTriggeredFor = videoId;
                 const ok = await readSummary();
                 if (!ok) autoReadTriggeredFor = null;  // allow retry on failure
@@ -880,15 +880,14 @@
                 getSummaryFab()?.classList.add('qb-sum-fab-ready');
             }
 
-            // Auto-read when toggle is on; otherwise silently prefetch audio if autoTts on
+            // Auto-read when either toggle is on — behaves exactly like clicking
+            // "Read summary aloud": shows the generating state, then plays.
             try {
                 const s = await Storage.getSettings();
-                if (s.autoSummarize && autoReadTriggeredFor !== videoId) {
+                if ((s.autoSummarize || s.autoTts) && autoReadTriggeredFor !== videoId) {
                     autoReadTriggeredFor = videoId;
                     const ok = await readSummary();
                     if (!ok) autoReadTriggeredFor = null;
-                } else if (!s.autoSummarize && s.autoTts) {
-                    prefetchTtsIfEnabled().catch(() => {});
                 }
             } catch {}
         } catch (e) {
@@ -916,23 +915,6 @@
         } catch {}
     }
 
-    async function prefetchTtsIfEnabled() {
-        try {
-            const s = await Storage.getSettings();
-            if (!s.autoTts) return;
-            const raw = summaryState.outputRaw;
-            if (!raw) return;
-            const cached = await Storage.getTtsEntry(summaryState.videoId).catch(() => null);
-            if (cached?.dataUrl) return;
-            const text = self.QuickBlockMarkdown?.stripMarkdown(raw) || raw;
-            if (!text.trim()) return;
-            const res = await chrome.runtime.sendMessage({ type: 'tts-generate', text });
-            if (res?.ok && res.dataUrl) {
-                Storage.setTtsAudio(summaryState.videoId, res.dataUrl, res.timestamps || null).catch(() => {});
-            }
-        } catch { /* best-effort */ }
-    }
-
     // ── TTS: read summary aloud via Kokoro (routed through background.js) ─────
     // Returns true if TTS produced an audio URL we handed to playAudio, false
     // on any failure or supersession. Callers can use this to roll back per-video
@@ -942,7 +924,7 @@
         const raw = summaryState.outputRaw;
         if (!raw) return false;
         if (summaryState.ttsLoading) return false;
-        const text = self.QuickBlockMarkdown?.stripMarkdown(raw) || raw;
+        const text = self.QuickBlockMarkdown?.prepForTts(raw) || raw;
         if (!text.trim()) return false;
 
         // Invalidate any in-flight request from a previous read.

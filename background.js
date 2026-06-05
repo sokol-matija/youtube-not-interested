@@ -11,6 +11,10 @@ const KOKORO_URL = `${KOKORO_BASE}/v1/audio/speech`;
 const KOKORO_CAPTIONED_URL = `${KOKORO_BASE}/dev/captioned_speech`;
 const KOKORO_VOICE = 'af_sky';
 
+chrome.action.onClicked.addListener(() => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
+});
+
 chrome.runtime.onInstalled.addListener(() => {
     chrome.alarms.create(SYNC_ALARM, { periodInMinutes: SYNC_PERIOD_MIN, delayInMinutes: 1 });
     triggerSync();
