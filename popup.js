@@ -141,6 +141,7 @@ async function render() {
     $('#autoSummarizeToggle').checked = !!settings.autoSummarize;
     $('#karaokeToggle').checked = settings.karaokeEnabled !== false;
     $('#karaokeWordCountSelect').value = String(settings.karaokeWordCount || 3);
+    $('#autoTtsToggle').checked = !!settings.autoTts;
     $('#modelSelect').value = settings.claudeModel || 'sonnet';
 
     await loadProfiles();
@@ -220,6 +221,10 @@ $('#karaokeToggle').addEventListener('change', async (e) => {
 
 $('#karaokeWordCountSelect').addEventListener('change', async (e) => {
     await Storage.setSettings({ karaokeWordCount: parseInt(e.target.value, 10) || 3 });
+});
+
+$('#autoTtsToggle').addEventListener('change', async (e) => {
+    await Storage.setSettings({ autoTts: e.target.checked });
 });
 
 $('#syncBtn').addEventListener('click', async () => {

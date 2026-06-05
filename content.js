@@ -443,6 +443,7 @@
         karaokeEnabled: true, // from settings
         karaokeWordCount: 3,  // from settings (odd → balanced sides)
         _playerRO: null,      // ResizeObserver keeping karaoke at 70% of player
+        karaokeRaf: null,     // rAF handle for word sync loop
     };
 
     // Minimal markdown→HTML for summary output. Escapes HTML first to prevent
@@ -879,13 +880,15 @@
                 getSummaryFab()?.classList.add('qb-sum-fab-ready');
             }
 
-            // Auto-read when toggle is on
+            // Auto-read when toggle is on; otherwise silently prefetch audio if autoTts on
             try {
                 const s = await Storage.getSettings();
                 if (s.autoSummarize && autoReadTriggeredFor !== videoId) {
                     autoReadTriggeredFor = videoId;
                     const ok = await readSummary();
                     if (!ok) autoReadTriggeredFor = null;
+                } else if (!s.autoSummarize && s.autoTts) {
+                    prefetchTtsIfEnabled().catch(() => {});
                 }
             } catch {}
         } catch (e) {
@@ -911,6 +914,23 @@
             btn.textContent = 'Copied ✓';
             setTimeout(() => { btn.textContent = orig; }, 1200);
         } catch {}
+    }
+
+    async function prefetchTtsIfEnabled() {
+        try {
+            const s = await Storage.getSettings();
+            if (!s.autoTts) return;
+            const raw = summaryState.outputRaw;
+            if (!raw) return;
+            const cached = await Storage.getTtsEntry(summaryState.videoId).catch(() => null);
+            if (cached?.dataUrl) return;
+            const text = self.QuickBlockMarkdown?.stripMarkdown(raw) || raw;
+            if (!text.trim()) return;
+            const res = await chrome.runtime.sendMessage({ type: 'tts-generate', text });
+            if (res?.ok && res.dataUrl) {
+                Storage.setTtsAudio(summaryState.videoId, res.dataUrl, res.timestamps || null).catch(() => {});
+            }
+        } catch { /* best-effort */ }
     }
 
     // ── TTS: read summary aloud via Kokoro (routed through background.js) ─────
@@ -1180,10 +1200,21 @@
             el.querySelector('.qb-sum-player-time').textContent =
                 `${fmtTime(audio.currentTime / spd)} / ${fmtTime((audio.duration || 0) / spd)}`;
         });
-        // Karaoke runs on its own listener so it keeps syncing even when the
-        // player pill is hidden via the cluster toggle.
-        audio.addEventListener('timeupdate', () => {
-            if (summaryState.words.length) updateKaraoke(audio.currentTime);
+        // Karaoke runs on rAF (not timeupdate which only fires ~4x/sec) so short
+        // words don't get skipped. Loop self-stops when audio pauses/ends.
+        function startKaraokeRaf() {
+            if (summaryState.karaokeRaf) return;
+            function tick() {
+                const a = summaryState.audio;
+                if (!a || a.paused || a.ended) { summaryState.karaokeRaf = null; return; }
+                if (summaryState.words.length) updateKaraoke(a.currentTime);
+                summaryState.karaokeRaf = requestAnimationFrame(tick);
+            }
+            summaryState.karaokeRaf = requestAnimationFrame(tick);
+        }
+        audio.addEventListener('play', startKaraokeRaf);
+        audio.addEventListener('pause', () => {
+            if (summaryState.karaokeRaf) { cancelAnimationFrame(summaryState.karaokeRaf); summaryState.karaokeRaf = null; }
         });
         audio.addEventListener('play', () => { mountPlayer('playing', ''); setPlayPauseIcon(false); syncTtsFabState(); });
         audio.addEventListener('pause', () => {
@@ -1228,6 +1259,7 @@
     function stopAudio() {
         const audio = summaryState.audio;
         if (!audio) return;
+        if (summaryState.karaokeRaf) { cancelAnimationFrame(summaryState.karaokeRaf); summaryState.karaokeRaf = null; }
         audio._intentionalStop = true;
         try { audio.pause(); } catch {}
         try { audio.src = ''; } catch {}
