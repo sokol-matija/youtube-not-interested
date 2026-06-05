@@ -620,6 +620,7 @@
                 <circle class="qb-sum-fab-spinner-track" cx="18" cy="18" r="15"/>
                 <circle class="qb-sum-fab-spinner-arc" cx="18" cy="18" r="15"/>
             </svg>
+            <span class="qb-beam-bloom" aria-hidden="true"></span>
         `;
 
         // Place FAB immediately before the avatar button so it sits right next to it.
@@ -1288,7 +1289,7 @@
         toast.className = 'qb-sum-toast';
         toast.setAttribute('role', 'button');
         toast.tabIndex = 0;
-        toast.innerHTML = `<span class="qb-sum-toast-dot"></span><span class="qb-sum-toast-text"></span>`;
+        toast.innerHTML = `<span class="qb-sum-toast-dot"></span><span class="qb-sum-toast-text"></span><span class="qb-beam-bloom" aria-hidden="true"></span>`;
         toast.querySelector('.qb-sum-toast-text').textContent = label;
         const activate = () => { openDrawer(); };
         toast.addEventListener('click', activate);

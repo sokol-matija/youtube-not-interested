@@ -319,70 +319,249 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
     max-width: 60vw;
 }
 
-/* Border-beam "ocean" edge — a travelling blue beam orbits the pill while the
-   toast is alive. Inspired by Jakubantalik/border-beam, reduced to a pure-CSS
-   conic beam (no JS driver): a hot white head with a blue-violet tail, masked to
-   a thin border, plus a soft outer bloom. Hue cycles via @property. */
-@property --qb-beam-hue {
+/* ───────────────────────────────────────────────────────────────────────────
+   Border-beam (ocean) — hand-port of Jakubantalik/border-beam generated CSS.
+   The lib's <BorderBeam> just emits this CSS string; no JS driver. Colours are
+   STATIC ocean radial patches painted around the perimeter; a rotating conic
+   "window" mask sweeps to reveal them, so a beam segment travels the border
+   (it does NOT spin around the centre). A bright white head + blurred bloom
+   ride the same --qb-beam-angle. inherits:true so pseudo-elements + the
+   .qb-beam-bloom child read the value animated on the host.
+   Used: sm on the FAB while summarizing, md on the ready toast.
+   ─────────────────────────────────────────────────────────────────────────── */
+@property --qb-beam-angle {
     syntax: "<angle>";
-    inherits: false;
+    inherits: true;
     initial-value: 0deg;
 }
+@keyframes qb-beam-spin { to { --qb-beam-angle: 360deg; } }
+@keyframes qb-beam-hue {
+    0%   { filter: hue-rotate(-30deg) brightness(1.3) saturate(1.2); }
+    50%  { filter: hue-rotate(30deg)  brightness(1.3) saturate(1.2); }
+    100% { filter: hue-rotate(-30deg) brightness(1.3) saturate(1.2); }
+}
+@keyframes qb-beam-hue-bloom {
+    0%   { filter: blur(8px) hue-rotate(-30deg) brightness(1.3) saturate(1.2); }
+    50%  { filter: blur(8px) hue-rotate(30deg)  brightness(1.3) saturate(1.2); }
+    100% { filter: blur(8px) hue-rotate(-30deg) brightness(1.3) saturate(1.2); }
+}
+
+/* ── md beam on the ready toast ──────────────────────────────────────────── */
 #quick-block-summary-toast {
     isolation: isolate;
+    animation: qb-beam-spin 1.96s linear infinite;
 }
-#quick-block-summary-toast::before,
+/* Stroke: white travelling head + static ocean patches, revealed by the
+   rotating conic window and clipped to a 1.5px border frame. */
 #quick-block-summary-toast::after {
     content: "";
     position: absolute;
-    inset: -1.5px;
+    inset: 0;
     border-radius: inherit;
-    pointer-events: none;
-    /* Travelling beam: bright head ~0deg, fading blue-violet tail behind it. */
-    background: conic-gradient(
-        from var(--qb-beam-angle, 0deg),
-        transparent 0deg,
-        rgba(60, 120, 255, 0.0) 200deg,
-        rgba(80, 100, 200, 0.45) 300deg,
-        rgba(100, 80, 255, 0.9) 340deg,
-        #cfe4ff 356deg,
-        #ffffff 360deg
-    );
-    filter: hue-rotate(var(--qb-beam-hue));
-    animation:
-        qb-sum-beam-spin 2s linear infinite,
-        qb-sum-beam-hue 6s linear infinite;
-}
-/* Crisp ring: mask out the interior, leaving a thin animated border. */
-#quick-block-summary-toast::after {
+    padding: 1.5px;
+    clip-path: inset(0 round 999px);
+    background:
+        conic-gradient(from var(--qb-beam-angle),
+            transparent 0%, transparent 54%,
+            rgba(255,255,255,0.1) 57%, rgba(255,255,255,0.3) 60%,
+            rgba(255,255,255,0.6) 63%, rgba(255,255,255,0.75) 66%,
+            rgba(255,255,255,0.6) 69%, rgba(255,255,255,0.3) 72%,
+            rgba(255,255,255,0.1) 75%, transparent 78%, transparent 100%),
+        radial-gradient(ellipse 70px 40px  at 33% -7.4%,  rgb(100,80,220), transparent),
+        radial-gradient(ellipse 60px 35px  at 12% -5%,    rgb(60,120,255), transparent),
+        radial-gradient(ellipse 40px 70px  at 2.1% 68.3%, rgb(80,100,200), transparent),
+        radial-gradient(ellipse 20px 35px  at 2.1% 68.3%, rgb(50,140,220), transparent),
+        radial-gradient(ellipse 180px 32px at 74.4% 100%, rgb(120,80,255), transparent),
+        radial-gradient(ellipse 85px 26px  at 55% 100%,   rgb(70,130,255), transparent),
+        radial-gradient(ellipse 74px 32px  at 93.9% 0%,   rgb(140,100,240), transparent),
+        radial-gradient(ellipse 26px 42px  at 100% 27.1%, rgb(90,110,230), transparent),
+        radial-gradient(ellipse 52px 48px  at 100% 27.1%, rgb(130,70,255), transparent);
     -webkit-mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
+        conic-gradient(from var(--qb-beam-angle),
+            transparent 0%, transparent 30%,
+            rgba(255,255,255,0.1) 36%, rgba(255,255,255,0.35) 44%,
+            white 52%, white 80%,
+            rgba(255,255,255,0.35) 86%, rgba(255,255,255,0.1) 92%,
+            transparent 95%, transparent 100%),
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: source-in, xor;
+    mask:
+        conic-gradient(from var(--qb-beam-angle),
+            transparent 0%, transparent 30%,
+            rgba(255,255,255,0.1) 36%, rgba(255,255,255,0.35) 44%,
+            white 52%, white 80%,
+            rgba(255,255,255,0.35) 86%, rgba(255,255,255,0.1) 92%,
+            transparent 95%, transparent 100%),
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask-composite: intersect, exclude;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0.48;
+    animation: qb-beam-hue 12s ease-in-out infinite;
+}
+/* Inner glow just inside the border, same travelling window. */
+#quick-block-summary-toast::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    clip-path: inset(0 round 999px);
+    background:
+        radial-gradient(ellipse 63px 36px  at 33% -7.4%,  rgba(100,80,220,0.45), transparent),
+        radial-gradient(ellipse 54px 32px  at 12% -5%,    rgba(60,120,255,0.45), transparent),
+        radial-gradient(ellipse 36px 63px  at 2.1% 68.3%, rgba(80,100,200,0.45), transparent),
+        radial-gradient(ellipse 18px 32px  at 2.1% 68.3%, rgba(50,140,220,0.45), transparent),
+        radial-gradient(ellipse 162px 29px at 74.4% 100%, rgba(120,80,255,0.45), transparent),
+        radial-gradient(ellipse 77px 23px  at 55% 100%,   rgba(70,130,255,0.45), transparent),
+        radial-gradient(ellipse 67px 29px  at 93.9% 0%,   rgba(140,100,240,0.45), transparent),
+        radial-gradient(ellipse 23px 38px  at 100% 27.1%, rgba(90,110,230,0.45), transparent),
+        radial-gradient(ellipse 47px 43px  at 100% 27.1%, rgba(130,70,255,0.45), transparent);
+    box-shadow: inset 0 0 9px 1px rgba(255,255,255,0.27);
+    -webkit-mask-image:
+        conic-gradient(from var(--qb-beam-angle),
+            transparent 0%, transparent 30%,
+            rgba(255,255,255,0.1) 36%, rgba(255,255,255,0.35) 44%,
+            white 52%, white 80%,
+            rgba(255,255,255,0.35) 86%, rgba(255,255,255,0.1) 92%,
+            transparent 95%, transparent 100%),
+        linear-gradient(white, transparent 28px, transparent calc(100% - 28px), white),
+        linear-gradient(to right, white, transparent 28px, transparent calc(100% - 28px), white);
+    -webkit-mask-composite: source-in, source-over;
+    mask-image:
+        conic-gradient(from var(--qb-beam-angle),
+            transparent 0%, transparent 30%,
+            rgba(255,255,255,0.1) 36%, rgba(255,255,255,0.35) 44%,
+            white 52%, white 80%,
+            rgba(255,255,255,0.35) 86%, rgba(255,255,255,0.1) 92%,
+            transparent 95%, transparent 100%),
+        linear-gradient(white, transparent 28px, transparent calc(100% - 28px), white),
+        linear-gradient(to right, white, transparent 28px, transparent calc(100% - 28px), white);
+    mask-composite: intersect, add;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.70;
+    animation: qb-beam-hue 12s ease-in-out infinite;
+}
+/* Bloom: blurred copy of the moving head, sitting on the border frame. */
+#quick-block-summary-toast .qb-beam-bloom {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    clip-path: inset(0 round 999px);
+    background:
+        conic-gradient(from var(--qb-beam-angle),
+            transparent 0%, transparent 58%,
+            rgba(255,255,255,0.03) 62%, rgba(255,255,255,0.08) 65%,
+            rgba(255,255,255,0.2) 67%, rgba(255,255,255,0.45) 69%,
+            rgba(255,255,255,0.85) 70%, rgba(255,255,255,0.85) 70.5%,
+            rgba(255,255,255,0.45) 71.5%, rgba(255,255,255,0.2) 73%,
+            rgba(255,255,255,0.08) 75%, rgba(255,255,255,0.03) 78%,
+            transparent 82%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask-composite: exclude;
     padding: 1.5px;
+    filter: blur(8px) brightness(1.3) saturate(1.2);
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0.80;
+    animation: qb-beam-hue-bloom 12s ease-in-out infinite;
 }
-/* Soft outer bloom following the same beam. */
-#quick-block-summary-toast::before {
-    inset: -7px;
-    filter: hue-rotate(var(--qb-beam-hue)) blur(10px);
-    opacity: 0.7;
-    z-index: -1;
+
+/* ── sm beam on the FAB while summarizing (replaces the arc spinner) ──────── */
+.qb-sum-fab-running .qb-sum-fab-spinner { display: none; }
+.qb-sum-fab-running { animation: qb-beam-spin 1.96s linear infinite; }
+/* Stroke beam — uses ::before so ::after stays free for the green ready badge.
+   Small ocean palette, wider window for the tiny circle. */
+.qb-sum-fab-running::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    padding: 1.5px;
+    clip-path: inset(0 round 50%);
+    background:
+        conic-gradient(from var(--qb-beam-angle),
+            transparent 0%, transparent 54%,
+            rgba(255,255,255,0.1) 57%, rgba(255,255,255,0.3) 60%,
+            rgba(255,255,255,0.6) 63%, rgba(255,255,255,0.75) 66%,
+            rgba(255,255,255,0.6) 69%, rgba(255,255,255,0.3) 72%,
+            rgba(255,255,255,0.1) 75%, transparent 78%, transparent 100%),
+        radial-gradient(ellipse 9px 18px  at 2% 68%,   rgb(60,140,200), transparent),
+        radial-gradient(ellipse 4px 8px   at 2% 68%,   rgb(50,120,180), transparent),
+        radial-gradient(ellipse 59px 9px  at 72% -3%,  rgb(100,80,220), transparent),
+        radial-gradient(ellipse 42px 7px  at 74% 100%, rgb(80,100,255), transparent),
+        radial-gradient(ellipse 10px 17px at 100% 27%, rgb(120,70,240), transparent),
+        radial-gradient(ellipse 10px 18px at 100% 27%, rgb(90,80,220), transparent),
+        radial-gradient(ellipse 5px 10px  at 100% 27%, rgb(70,110,255), transparent),
+        radial-gradient(ellipse 11px 12px at 100% 27%, rgb(110,90,230), transparent);
+    -webkit-mask:
+        conic-gradient(from var(--qb-beam-angle),
+            transparent 0%, transparent 22%,
+            rgba(255,255,255,0.12) 28%, rgba(255,255,255,0.4) 36%,
+            white 46%, white 82%,
+            rgba(255,255,255,0.4) 88%, rgba(255,255,255,0.12) 94%,
+            transparent 97%, transparent 100%),
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: source-in, xor;
+    mask:
+        conic-gradient(from var(--qb-beam-angle),
+            transparent 0%, transparent 22%,
+            rgba(255,255,255,0.12) 28%, rgba(255,255,255,0.4) 36%,
+            white 46%, white 82%,
+            rgba(255,255,255,0.4) 88%, rgba(255,255,255,0.12) 94%,
+            transparent 97%, transparent 100%),
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask-composite: intersect, exclude;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0.55;
+    animation: qb-beam-hue 12s ease-in-out infinite;
 }
-@property --qb-beam-angle {
-    syntax: "<angle>";
-    inherits: false;
-    initial-value: 0deg;
+/* Bloom child — hidden unless running. */
+.qb-sum-fab .qb-beam-bloom {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    clip-path: inset(0 round 50%);
+    padding: 1.5px;
+    background:
+        conic-gradient(from var(--qb-beam-angle),
+            transparent 0%, transparent 58%,
+            rgba(255,255,255,0.03) 62%, rgba(255,255,255,0.08) 65%,
+            rgba(255,255,255,0.2) 67%, rgba(255,255,255,0.45) 69%,
+            rgba(255,255,255,0.85) 70%, rgba(255,255,255,0.85) 70.5%,
+            rgba(255,255,255,0.45) 71.5%, rgba(255,255,255,0.2) 73%,
+            rgba(255,255,255,0.08) 75%, rgba(255,255,255,0.03) 78%,
+            transparent 82%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    filter: blur(6px) brightness(1.3) saturate(1.2);
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 0.2s ease;
 }
-@keyframes qb-sum-beam-spin {
-    to { --qb-beam-angle: 360deg; }
+.qb-sum-fab-running .qb-beam-bloom {
+    opacity: 0.8;
+    animation: qb-beam-hue-bloom 12s ease-in-out infinite;
 }
-@keyframes qb-sum-beam-hue {
-    to { --qb-beam-hue: 360deg; }
-}
+
 @media (prefers-reduced-motion: reduce) {
+    #quick-block-summary-toast,
+    .qb-sum-fab-running,
     #quick-block-summary-toast::before,
-    #quick-block-summary-toast::after {
+    #quick-block-summary-toast::after,
+    #quick-block-summary-toast .qb-beam-bloom,
+    .qb-sum-fab-running::before,
+    .qb-sum-fab-running .qb-beam-bloom {
         animation: none;
     }
 }
