@@ -1195,14 +1195,6 @@ body.quick-block-focus-mode ytd-browse[page-subtype="home"] #scroll-container {
     font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: #f1f1f1;
 }
-.qb-focus-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: #2ecc71;
-    box-shadow: 0 0 6px rgba(46, 204, 113, 0.7);
-    flex-shrink: 0;
-}
 .qb-focus-title { font-size: 15px; font-weight: 600; color: #f1f1f1; }
 .qb-focus-sub { font-size: 13px; color: #aaa; margin-top: 2px; }
 .qb-focus-left { color: #f1f1f1; font-weight: 600; font-variant-numeric: tabular-nums; }

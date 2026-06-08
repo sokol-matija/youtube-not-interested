@@ -367,7 +367,6 @@
         el.className = 'qb-focus-msg' + (focusBeam ? '' : ' qb-no-beam');
         el.innerHTML = `<div class="qb-focus-card">
             <span class="qb-beam-bloom"></span>
-            <span class="qb-focus-dot"></span>
             <div class="qb-focus-textwrap">
                 <div class="qb-focus-title"></div>
                 <div class="qb-focus-sub">Home feed back in <span class="qb-focus-left"></span></div>
