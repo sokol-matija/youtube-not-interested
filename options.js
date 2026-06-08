@@ -264,7 +264,21 @@ function renderFocusStatus() {
 setInterval(renderFocusStatus, 20000);  // time passes → status can flip on its own
 
 $('#focusHideNowToggle').addEventListener('change', e => Storage.setSettings({ focusHideNow: e.target.checked }));
-$('#focusEnabledToggle').addEventListener('change', e => Storage.setSettings({ focusModeEnabled: e.target.checked }));
+
+// Friction (not security): turning the schedule OFF requires a deliberately
+// hard password you have to recall in the moment. Enabling it stays free.
+const FOCUS_UNLOCK = 'j5q8rqwp521c1';
+$('#focusEnabledToggle').addEventListener('change', e => {
+    if (!e.target.checked) {
+        const pw = prompt('Enter password to turn OFF the focus schedule:');
+        if (pw !== FOCUS_UNLOCK) {
+            e.target.checked = true;  // revert — stays enabled
+            if (pw !== null) showToast('Wrong password — schedule stays on');
+            return;
+        }
+    }
+    Storage.setSettings({ focusModeEnabled: e.target.checked });
+});
 $('#focusMessage').addEventListener('input', e => Storage.setSettings({ focusMessage: e.target.value }));
 $('#focusBeamToggle').addEventListener('change', e => Storage.setSettings({ focusBeam: e.target.checked }));
 $('#focusStart').addEventListener('change', e => Storage.setSettings({ focusStart: e.target.value || '09:00' }));
