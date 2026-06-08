@@ -347,10 +347,32 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
     isolation: isolate;
     animation: qb-beam-spin 1.96s linear infinite;
 }
+/* Focus pill: same beam, plus a one-shot entrance like the toast appearing. */
+#quick-block-focus-message .qb-focus-card {
+    isolation: isolate;
+    animation: qb-focus-in 0.4s cubic-bezier(0.22, 1, 0.36, 1), qb-beam-spin 1.96s linear infinite;
+}
+@keyframes qb-focus-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Beam off: freeze + hide the moving beam layers, keep a clean static pill. */
+#quick-block-focus-message.qb-no-beam .qb-focus-card,
+#quick-block-focus-message.qb-no-beam .qb-focus-card::before,
+#quick-block-focus-message.qb-no-beam .qb-focus-card::after,
+#quick-block-focus-message.qb-no-beam .qb-focus-card .qb-beam-bloom {
+    animation: none !important;
+}
+#quick-block-focus-message.qb-no-beam .qb-focus-card::before,
+#quick-block-focus-message.qb-no-beam .qb-focus-card::after,
+#quick-block-focus-message.qb-no-beam .qb-focus-card .qb-beam-bloom {
+    display: none !important;
+}
 /* Stroke: white travelling head + static ocean patches, revealed by the
    rotating conic window and clipped to a 1.5px border frame. */
 #quick-block-summary-toast::after,
-#qb-sum-player.loading::after {
+#qb-sum-player.loading::after,
+#quick-block-focus-message .qb-focus-card::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -400,7 +422,8 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
 }
 /* Inner glow just inside the border, same travelling window. */
 #quick-block-summary-toast::before,
-#qb-sum-player.loading::before {
+#qb-sum-player.loading::before,
+#quick-block-focus-message .qb-focus-card::before {
     content: "";
     position: absolute;
     inset: 0;
@@ -444,7 +467,8 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
 }
 /* Bloom: blurred copy of the moving head, sitting on the border frame. */
 #quick-block-summary-toast .qb-beam-bloom,
-#qb-sum-player.loading .qb-beam-bloom {
+#qb-sum-player.loading .qb-beam-bloom,
+#quick-block-focus-message .qb-focus-card .qb-beam-bloom {
     position: absolute;
     inset: 0;
     border-radius: inherit;
@@ -572,7 +596,11 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
     .qb-sum-fab-running::before,
     .qb-sum-fab-running .qb-beam-bloom,
     .qb-tts-fab.qb-tts-fab-loading::before,
-    .qb-tts-fab.qb-tts-fab-loading .qb-beam-bloom {
+    .qb-tts-fab.qb-tts-fab-loading .qb-beam-bloom,
+    #quick-block-focus-message .qb-focus-card,
+    #quick-block-focus-message .qb-focus-card::before,
+    #quick-block-focus-message .qb-focus-card::after,
+    #quick-block-focus-message .qb-focus-card .qb-beam-bloom {
         animation: none;
     }
 }
@@ -1139,11 +1167,8 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
    homepage is affected; subscriptions (page-subtype="subscriptions"), search,
    and watch pages never match. Fails safe: no attribute → nothing hidden.
    ─────────────────────────────────────────────────────────────────────────── */
-body.quick-block-focus-mode ytd-browse[page-subtype="home"] ytd-rich-grid-renderer,
-body.quick-block-focus-mode ytd-browse[page-subtype="home"] ytd-rich-section-renderer,
-body.quick-block-focus-mode ytd-browse[page-subtype="home"] ytd-reel-shelf-renderer,
-body.quick-block-focus-mode ytd-browse[page-subtype="home"] ytd-feed-filter-chip-bar-renderer,
-body.quick-block-focus-mode ytd-browse[page-subtype="home"] #chips-wrapper {
+body.quick-block-focus-mode ytd-browse[page-subtype="home"] #contents,
+body.quick-block-focus-mode ytd-browse[page-subtype="home"] #scroll-container {
     display: none !important;
 }
 
@@ -1155,18 +1180,41 @@ body.quick-block-focus-mode ytd-browse[page-subtype="home"] #chips-wrapper {
     width: 100%;
     box-sizing: border-box;
     padding: 40px 24px;
+}
+/* Pill matches the summary-ready toast / audio player surface + border-beam. */
+.qb-focus-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 26px;
+    background: rgba(28, 28, 28, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
     font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #f1f1f1;
 }
-.qb-focus-msg-inner {
-    text-align: center;
-    max-width: 460px;
-    color: var(--yt-spec-text-secondary, #aaa);
+.qb-focus-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #2ecc71;
+    box-shadow: 0 0 6px rgba(46, 204, 113, 0.7);
+    flex-shrink: 0;
 }
-.qb-focus-msg-icon { font-size: 44px; line-height: 1; margin-bottom: 16px; opacity: 0.9; }
-.qb-focus-msg-title {
-    font-size: 22px;
-    font-weight: 600;
-    color: var(--yt-spec-text-primary, #f1f1f1);
-    margin-bottom: 8px;
+.qb-focus-title { font-size: 15px; font-weight: 600; color: #f1f1f1; }
+.qb-focus-sub { font-size: 13px; color: #aaa; margin-top: 2px; }
+.qb-focus-left { color: #f1f1f1; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+@media (prefers-color-scheme: light) {
+    .qb-focus-card {
+        background: rgba(255, 255, 255, 0.98);
+        color: #0f0f0f;
+        border-color: rgba(0, 0, 0, 0.10);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    }
+    .qb-focus-title { color: #0f0f0f; }
+    .qb-focus-sub { color: #555; }
+    .qb-focus-left { color: #0f0f0f; }
 }
-.qb-focus-msg-text { font-size: 15px; line-height: 1.5; }

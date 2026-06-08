@@ -28,6 +28,9 @@
     let focusDays = [];                  // 0=Sun..6=Sat
     let focusStart = '09:00';
     let focusEnd = '17:00';
+    let focusHideNow = false;            // manual override: hide home feed now, ignore schedule
+    let focusMessage = 'You are free, do something that matters';
+    let focusBeam = true;
     let focusActive = false;
     const FOCUS_MSG_ID = 'quick-block-focus-message';
 
@@ -240,6 +243,9 @@
             focusDays = Array.isArray(newSettings.focusDays) ? newSettings.focusDays : [];
             focusStart = newSettings.focusStart || '09:00';
             focusEnd = newSettings.focusEnd || '17:00';
+            focusHideNow = !!newSettings.focusHideNow;
+            if (typeof newSettings.focusMessage === 'string') focusMessage = newSettings.focusMessage;
+            focusBeam = newSettings.focusBeam !== false;
             applyFocusMode();
         }
     });
@@ -300,7 +306,30 @@
     }
 
     function focusShouldBeOn() {
+        if (focusHideNow) return true;  // manual override
         return focusModeEnabled && isInFocusWindow(new Date(), focusDays, focusStart, focusEnd);
+    }
+
+    // Minutes from now until the active window's end boundary.
+    function focusMinutesLeft(now) {
+        const toMin = (s) => {
+            const m = /^(\d{1,2}):(\d{2})$/.exec(s || '');
+            return m ? (+m[1]) * 60 + (+m[2]) : null;
+        };
+        const s = toMin(focusStart), e = toMin(focusEnd);
+        if (s === null || e === null) return 0;
+        const cur = now.getHours() * 60 + now.getMinutes();
+        if (s < e) return Math.max(0, e - cur);          // same-day window
+        if (cur >= s) return (1440 - cur) + e;           // overnight, evening → tomorrow morning
+        return Math.max(0, e - cur);                     // overnight, early morning → today's end
+    }
+
+    // "1h33min" / "33min" / "less than a minute"
+    function fmtFocusLeft(min) {
+        if (min <= 0) return 'less than a minute';
+        const h = Math.floor(min / 60), m = min % 60;
+        if (h > 0) return m > 0 ? `${h}h${m}min` : `${h}h`;
+        return `${m}min`;
     }
 
     function applyFocusMode() {
@@ -314,22 +343,39 @@
     function injectFocusMessage() {
         const home = document.querySelector('ytd-browse[page-subtype="home"]');
         if (!home) return;  // not on home yet — observer/nav retries
-        const text = `Focus mode on — feed hidden until ${focusEnd}`;
+        // Manual hide has no end boundary → no countdown line.
+        const left = focusHideNow ? '' : fmtFocusLeft(focusMinutesLeft(new Date()));
         let el = document.getElementById(FOCUS_MSG_ID);
         if (el) {
-            el.querySelector('.qb-focus-msg-text').textContent = text;
+            if (el.classList.contains('qb-no-beam') === focusBeam) el.classList.toggle('qb-no-beam', !focusBeam);
+            // CRITICAL: only touch the DOM when something actually changed.
+            // The MutationObserver fires on any mutation, so an unconditional
+            // textContent write here would retrigger the observer → infinite
+            // loop → page freeze.
+            const titleEl = el.querySelector('.qb-focus-title');
+            if (titleEl && titleEl.textContent !== focusMessage) titleEl.textContent = focusMessage;
+            const leftEl = el.querySelector('.qb-focus-left');
+            if (leftEl && leftEl.textContent !== left) leftEl.textContent = left;
+            const subEl = el.querySelector('.qb-focus-sub');
+            const wantSub = focusHideNow ? 'none' : '';
+            if (subEl && subEl.style.display !== wantSub) subEl.style.display = wantSub;
             if (!home.contains(el)) home.prepend(el);
             return;
         }
         el = document.createElement('div');
         el.id = FOCUS_MSG_ID;
-        el.className = 'qb-focus-msg';
-        el.innerHTML = `<div class="qb-focus-msg-inner">
-            <div class="qb-focus-msg-icon">🌙</div>
-            <div class="qb-focus-msg-title">Focus mode</div>
-            <div class="qb-focus-msg-text"></div>
+        el.className = 'qb-focus-msg' + (focusBeam ? '' : ' qb-no-beam');
+        el.innerHTML = `<div class="qb-focus-card">
+            <span class="qb-beam-bloom"></span>
+            <span class="qb-focus-dot"></span>
+            <div class="qb-focus-textwrap">
+                <div class="qb-focus-title"></div>
+                <div class="qb-focus-sub">Home feed back in <span class="qb-focus-left"></span></div>
+            </div>
         </div>`;
-        el.querySelector('.qb-focus-msg-text').textContent = text;
+        el.querySelector('.qb-focus-title').textContent = focusMessage;
+        el.querySelector('.qb-focus-left').textContent = left;
+        if (focusHideNow) el.querySelector('.qb-focus-sub').style.display = 'none';
         home.prepend(el);
     }
 
@@ -1692,6 +1738,9 @@
         focusDays = Array.isArray(settings.focusDays) ? settings.focusDays : [];
         focusStart = settings.focusStart || '09:00';
         focusEnd = settings.focusEnd || '17:00';
+        focusHideNow = !!settings.focusHideNow;
+        if (typeof settings.focusMessage === 'string') focusMessage = settings.focusMessage;
+        focusBeam = settings.focusBeam !== false;
         applyOnWatchClass();
         applyFocusMode();
         rescanAll();
@@ -1717,8 +1766,9 @@
             // Auto-summarize when the master toggle is on. Latched per videoId.
             tryAutoSummarize();
             // Focus mode: the home browse element rebuilds on nav — re-inject the
-            // message while active (idempotent).
-            if (focusActive) injectFocusMessage();
+            // message only when it's actually missing. Re-injecting every tick
+            // would write the DOM and retrigger this observer → freeze.
+            if (focusActive && !document.getElementById(FOCUS_MSG_ID)) injectFocusMessage();
         });
         observer.observe(document.body, { childList: true, subtree: true });
 

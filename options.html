@@ -107,7 +107,17 @@
             </div>
 
             <div class="card">
-                <div class="card-header">Scheduled Focus Mode</div>
+                <div class="card-header">Focus Mode</div>
+                <div class="row">
+                    <div class="row-text">
+                        <span class="row-label">Hide home feed now</span>
+                        <span class="row-hint">Blanks the homepage immediately, ignoring the schedule.</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="focusHideNowToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
                 <div class="row">
                     <div class="row-text">
                         <span class="row-label">Blank homepage during schedule</span>
@@ -140,6 +150,24 @@
                 </div>
                 <div class="row">
                     <span class="row-hint">If "To" is earlier than "From", the window runs overnight and the selected day is the evening it starts.</span>
+                </div>
+                <div class="row">
+                    <span class="row-label">Message</span>
+                    <input type="text" id="focusMessage" class="focus-text" maxlength="80" placeholder="You are free, do something that matters">
+                </div>
+                <div class="row">
+                    <div class="row-text">
+                        <span class="row-label">Beam animation</span>
+                        <span class="row-hint">Animated border glow on the pill. Off = static pill.</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="focusBeamToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="row">
+                    <span class="row-label">Status</span>
+                    <span id="focusStatus" class="focus-status">—</span>
                 </div>
             </div>
         </section>

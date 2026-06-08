@@ -159,12 +159,18 @@ async function render() {
     $('#diagModelSelect').value          = settings.claudeModel || 'sonnet';
 
     // Scheduled Focus Mode
+    $('#focusHideNowToggle').checked = !!settings.focusHideNow;
     $('#focusEnabledToggle').checked = !!settings.focusModeEnabled;
     $('#focusStart').value = settings.focusStart || '09:00';
     $('#focusEnd').value   = settings.focusEnd || '17:00';
+    if (document.activeElement !== $('#focusMessage')) {
+        $('#focusMessage').value = settings.focusMessage ?? 'You are free, do something that matters';
+    }
+    $('#focusBeamToggle').checked = settings.focusBeam !== false;
     const focusDays = new Set(Array.isArray(settings.focusDays) ? settings.focusDays : []);
     document.querySelectorAll('#focusDays .focus-day').forEach(b =>
         b.classList.toggle('active', focusDays.has(+b.dataset.day)));
+    renderFocusStatus();
 
     await loadProfiles();
 
@@ -225,7 +231,42 @@ $('#diagModelSelect').addEventListener('change', e => {
 });
 
 // ── Scheduled Focus Mode ────────────────────────────────────────────────────────
+// Same rule as content.js isInFocusWindow, computed from the live controls so the
+// status flips instantly as you edit days/times — no guessing whether it's "on now".
+function focusActiveNow() {
+    if (!$('#focusEnabledToggle').checked) return false;
+    const days = [...document.querySelectorAll('#focusDays .focus-day.active')].map(b => +b.dataset.day);
+    if (!days.length) return false;
+    const toMin = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
+    const s = toMin($('#focusStart').value), e = toMin($('#focusEnd').value);
+    if (s === null || e === null || s === e) return false;
+    const now = new Date(), cur = now.getHours() * 60 + now.getMinutes(), today = now.getDay();
+    if (s < e) return cur >= s && cur < e && days.includes(today);
+    return (cur >= s && days.includes(today)) || (cur < e && days.includes((today + 6) % 7));
+}
+function renderFocusStatus() {
+    const el = $('#focusStatus');
+    if (!el) return;
+    if ($('#focusHideNowToggle').checked) {
+        el.textContent = '● Hidden now (manual override)';
+        el.className = 'focus-status active';
+    } else if (!$('#focusEnabledToggle').checked) {
+        el.textContent = 'Schedule off';
+        el.className = 'focus-status';
+    } else if (focusActiveNow()) {
+        el.textContent = '● Active now — homepage hidden';
+        el.className = 'focus-status active';
+    } else {
+        el.textContent = '○ Inactive right now';
+        el.className = 'focus-status';
+    }
+}
+setInterval(renderFocusStatus, 20000);  // time passes → status can flip on its own
+
+$('#focusHideNowToggle').addEventListener('change', e => Storage.setSettings({ focusHideNow: e.target.checked }));
 $('#focusEnabledToggle').addEventListener('change', e => Storage.setSettings({ focusModeEnabled: e.target.checked }));
+$('#focusMessage').addEventListener('input', e => Storage.setSettings({ focusMessage: e.target.value }));
+$('#focusBeamToggle').addEventListener('change', e => Storage.setSettings({ focusBeam: e.target.checked }));
 $('#focusStart').addEventListener('change', e => Storage.setSettings({ focusStart: e.target.value || '09:00' }));
 $('#focusEnd').addEventListener('change', e => Storage.setSettings({ focusEnd: e.target.value || '17:00' }));
 document.querySelectorAll('#focusDays .focus-day').forEach(btn => {
