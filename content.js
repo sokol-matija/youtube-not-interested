@@ -23,6 +23,14 @@
     const sessionRestored = new Set(); // IDs user restored this session
     let lastMenuVideoElement = null;    // for capturing "Save to Watch later" clicks
 
+    // ── Scheduled Focus Mode ───────────────────────────────────────────────────
+    let focusModeEnabled = false;
+    let focusDays = [];                  // 0=Sun..6=Sat
+    let focusStart = '09:00';
+    let focusEnd = '17:00';
+    let focusActive = false;
+    const FOCUS_MSG_ID = 'quick-block-focus-message';
+
     // ── X button (Not Interested) ──────────────────────────────────────────────
     function addBlockButton(videoElement) {
         try {
@@ -226,6 +234,13 @@
             if (typeof applyKaraokeSettings === 'function') {
                 applyKaraokeSettings(countChanged);
             }
+
+            // Scheduled Focus Mode — update vars + re-evaluate immediately.
+            focusModeEnabled = !!newSettings.focusModeEnabled;
+            focusDays = Array.isArray(newSettings.focusDays) ? newSettings.focusDays : [];
+            focusStart = newSettings.focusStart || '09:00';
+            focusEnd = newSettings.focusEnd || '17:00';
+            applyFocusMode();
         }
     });
 
@@ -262,6 +277,64 @@
     function currentWatchVideoId() {
         const m = location.href.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
         return location.pathname === '/watch' && m ? m[1] : null;
+    }
+
+    // ── Scheduled Focus Mode ───────────────────────────────────────────────────
+    // days: int[] 0=Sun..6=Sat. start/end: 'HH:MM' (local). Handles same-day and
+    // overnight (wrap-around) windows; malformed/empty input → off.
+    function isInFocusWindow(now, days, start, end) {
+        if (!Array.isArray(days) || days.length === 0) return false;
+        const toMin = (s) => {
+            const m = /^(\d{1,2}):(\d{2})$/.exec(s || '');
+            return m ? (+m[1]) * 60 + (+m[2]) : null;
+        };
+        const s = toMin(start), e = toMin(end);
+        if (s === null || e === null || s === e) return false;
+        const cur = now.getHours() * 60 + now.getMinutes();
+        const today = now.getDay();
+        if (s < e) return days.includes(today) && cur >= s && cur < e;   // same-day
+        // Overnight wrap: selected day = the evening the window OPENS.
+        if (cur >= s) return days.includes(today);                        // opens tonight
+        if (cur < e)  return days.includes((today + 6) % 7);             // spillover into morning
+        return false;
+    }
+
+    function focusShouldBeOn() {
+        return focusModeEnabled && isInFocusWindow(new Date(), focusDays, focusStart, focusEnd);
+    }
+
+    function applyFocusMode() {
+        const on = focusShouldBeOn();
+        document.body.classList.toggle('quick-block-focus-mode', on);
+        focusActive = on;
+        if (on) injectFocusMessage();
+        else removeFocusMessage();
+    }
+
+    function injectFocusMessage() {
+        const home = document.querySelector('ytd-browse[page-subtype="home"]');
+        if (!home) return;  // not on home yet — observer/nav retries
+        const text = `Focus mode on — feed hidden until ${focusEnd}`;
+        let el = document.getElementById(FOCUS_MSG_ID);
+        if (el) {
+            el.querySelector('.qb-focus-msg-text').textContent = text;
+            if (!home.contains(el)) home.prepend(el);
+            return;
+        }
+        el = document.createElement('div');
+        el.id = FOCUS_MSG_ID;
+        el.className = 'qb-focus-msg';
+        el.innerHTML = `<div class="qb-focus-msg-inner">
+            <div class="qb-focus-msg-icon">🌙</div>
+            <div class="qb-focus-msg-title">Focus mode</div>
+            <div class="qb-focus-msg-text"></div>
+        </div>`;
+        el.querySelector('.qb-focus-msg-text').textContent = text;
+        home.prepend(el);
+    }
+
+    function removeFocusMessage() {
+        document.getElementById(FOCUS_MSG_ID)?.remove();
     }
 
     async function ensureVideoPlaying(timeoutMs = 4000) {
@@ -915,6 +988,27 @@
         } catch {}
     }
 
+    // sendMessage to the MV3 service worker, retrying the cold-start race where a
+    // sleeping worker drops the first message with "Could not establish
+    // connection. Receiving end does not exist." Each attempt also wakes it, so
+    // the retry usually lands on a live worker.
+    async function sendMessageWithWake(msg, attempts = 4) {
+        for (let i = 0; i < attempts; i++) {
+            try {
+                return await chrome.runtime.sendMessage(msg);
+            } catch (e) {
+                const m = e?.message || '';
+                const transient = m.includes('Receiving end does not exist')
+                    || m.includes('Could not establish connection')
+                    || m.includes('message port closed');
+                if (!transient || i === attempts - 1) {
+                    return { ok: false, error: m || 'sendMessage failed' };
+                }
+                await new Promise(r => setTimeout(r, 150 * (i + 1)));
+            }
+        }
+    }
+
     // ── TTS: read summary aloud via Kokoro (routed through background.js) ─────
     // Returns true if TTS produced an audio URL we handed to playAudio, false
     // on any failure or supersession. Callers can use this to roll back per-video
@@ -955,11 +1049,7 @@
         mountPlayer('loading', 'Generating audio…');
 
         let res;
-        try {
-            res = await chrome.runtime.sendMessage({ type: 'tts-generate', text });
-        } catch (e) {
-            res = { ok: false, error: e?.message || 'sendMessage failed' };
-        }
+        res = await sendMessageWithWake({ type: 'tts-generate', text });
 
         // A newer request (or cleanup) superseded this one — drop the result.
         if (token !== summaryState.audioToken) {
@@ -1004,6 +1094,9 @@
     function getPlayerEl() { return document.getElementById(SUMMARY_PLAYER_ID); }
 
     function mountPlayer(state, label) {
+        // Player and the summary-ready toast share the bottom-center slot — clear
+        // the toast so they don't stack. The player now carries the status.
+        dismissSummaryToast();
         let el = getPlayerEl();
         if (!el) {
             el = document.createElement('div');
@@ -1567,6 +1660,7 @@
         autoReadTriggeredFor = null;
         applyOnWatchClass();
         applyWatchAutomations();
+        applyFocusMode();
         removeSummaryUI();
         if (currentWatchVideoId()) {
             setTimeout(() => { injectSummaryUI(); tryAutoSummarize(); }, 400);
@@ -1594,7 +1688,12 @@
         applyShareToggle(settings.hideShareButton);
         applyThanksToggle(settings.hideThanksButton);
         applySearchOnWatchToggle(settings.hideSearchOnWatch);
+        focusModeEnabled = !!settings.focusModeEnabled;
+        focusDays = Array.isArray(settings.focusDays) ? settings.focusDays : [];
+        focusStart = settings.focusStart || '09:00';
+        focusEnd = settings.focusEnd || '17:00';
         applyOnWatchClass();
+        applyFocusMode();
         rescanAll();
     }
 
@@ -1617,8 +1716,15 @@
             tryAutoOpenComments();
             // Auto-summarize when the master toggle is on. Latched per videoId.
             tryAutoSummarize();
+            // Focus mode: the home browse element rebuilds on nav — re-inject the
+            // message while active (idempotent).
+            if (focusActive) injectFocusMessage();
         });
         observer.observe(document.body, { childList: true, subtree: true });
+
+        // Focus mode window can start/end while the tab sits open — re-check.
+        applyFocusMode();
+        setInterval(applyFocusMode, 30000);
 
         // First-run: if we've never synced, kick one off via background
         const last = await Storage.getLastSync();

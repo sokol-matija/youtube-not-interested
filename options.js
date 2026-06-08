@@ -158,6 +158,14 @@ async function render() {
     $('#modelSelect').value              = settings.claudeModel || 'sonnet';
     $('#diagModelSelect').value          = settings.claudeModel || 'sonnet';
 
+    // Scheduled Focus Mode
+    $('#focusEnabledToggle').checked = !!settings.focusModeEnabled;
+    $('#focusStart').value = settings.focusStart || '09:00';
+    $('#focusEnd').value   = settings.focusEnd || '17:00';
+    const focusDays = new Set(Array.isArray(settings.focusDays) ? settings.focusDays : []);
+    document.querySelectorAll('#focusDays .focus-day').forEach(b =>
+        b.classList.toggle('active', focusDays.has(+b.dataset.day)));
+
     await loadProfiles();
 
     const list = $('#recentList');
@@ -214,6 +222,19 @@ $('#modelSelect').addEventListener('change', e => Storage.setSettings({ claudeMo
 $('#diagModelSelect').addEventListener('change', e => {
     Storage.setSettings({ claudeModel: e.target.value });
     $('#modelSelect').value = e.target.value;
+});
+
+// ── Scheduled Focus Mode ────────────────────────────────────────────────────────
+$('#focusEnabledToggle').addEventListener('change', e => Storage.setSettings({ focusModeEnabled: e.target.checked }));
+$('#focusStart').addEventListener('change', e => Storage.setSettings({ focusStart: e.target.value || '09:00' }));
+$('#focusEnd').addEventListener('change', e => Storage.setSettings({ focusEnd: e.target.value || '17:00' }));
+document.querySelectorAll('#focusDays .focus-day').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        btn.classList.toggle('active');
+        const days = [...document.querySelectorAll('#focusDays .focus-day.active')]
+            .map(b => +b.dataset.day).sort((a, b) => a - b);
+        await Storage.setSettings({ focusDays: days });
+    });
 });
 
 // ── Sync ──────────────────────────────────────────────────────────────────────

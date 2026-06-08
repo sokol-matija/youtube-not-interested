@@ -506,3 +506,32 @@ body {
 .danger-row-text { display: flex; flex-direction: column; gap: 2px; }
 .danger-row-label { font-weight: 500; font-size: 13px; }
 .danger-row-hint { font-size: 11px; color: var(--text-mute); }
+
+/* ── Scheduled Focus Mode ─────────────────────────────────────────── */
+.focus-days-row { align-items: center; }
+.focus-days { display: flex; gap: 6px; }
+.focus-day {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.focus-day:hover { color: var(--text); }
+.focus-day.active { background: var(--accent); color: #fff; border-color: transparent; }
+.focus-time {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+}
+.focus-time:focus { outline: none; border-color: var(--accent); }

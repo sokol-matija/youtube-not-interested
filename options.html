@@ -105,6 +105,43 @@
                     </label>
                 </div>
             </div>
+
+            <div class="card">
+                <div class="card-header">Scheduled Focus Mode</div>
+                <div class="row">
+                    <div class="row-text">
+                        <span class="row-label">Blank homepage during schedule</span>
+                        <span class="row-hint">Hides the home feed and shows a calm message. Homepage only.</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="focusEnabledToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="row focus-days-row">
+                    <span class="row-label">Days</span>
+                    <div class="focus-days" id="focusDays">
+                        <button type="button" class="focus-day" data-day="0" title="Sunday">S</button>
+                        <button type="button" class="focus-day" data-day="1" title="Monday">M</button>
+                        <button type="button" class="focus-day" data-day="2" title="Tuesday">T</button>
+                        <button type="button" class="focus-day" data-day="3" title="Wednesday">W</button>
+                        <button type="button" class="focus-day" data-day="4" title="Thursday">T</button>
+                        <button type="button" class="focus-day" data-day="5" title="Friday">F</button>
+                        <button type="button" class="focus-day" data-day="6" title="Saturday">S</button>
+                    </div>
+                </div>
+                <div class="row">
+                    <span class="row-label">From</span>
+                    <input type="time" id="focusStart" class="focus-time">
+                </div>
+                <div class="row">
+                    <span class="row-label">To</span>
+                    <input type="time" id="focusEnd" class="focus-time">
+                </div>
+                <div class="row">
+                    <span class="row-hint">If "To" is earlier than "From", the window runs overnight and the selected day is the evening it starts.</span>
+                </div>
+            </div>
         </section>
 
         <!-- ── Summary & AI ── -->

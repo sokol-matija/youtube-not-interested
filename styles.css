@@ -1132,3 +1132,41 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
     .qb-sum-drawer { width: 100vw; max-width: 100vw; padding: 16px 18px; }
     .qb-sum-body { font-size: 15px; padding: 18px 20px; }
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Scheduled Focus Mode — blank the homepage feed during the schedule.
+   All hide rules are scoped under ytd-browse[page-subtype="home"] so only the
+   homepage is affected; subscriptions (page-subtype="subscriptions"), search,
+   and watch pages never match. Fails safe: no attribute → nothing hidden.
+   ─────────────────────────────────────────────────────────────────────────── */
+body.quick-block-focus-mode ytd-browse[page-subtype="home"] ytd-rich-grid-renderer,
+body.quick-block-focus-mode ytd-browse[page-subtype="home"] ytd-rich-section-renderer,
+body.quick-block-focus-mode ytd-browse[page-subtype="home"] ytd-reel-shelf-renderer,
+body.quick-block-focus-mode ytd-browse[page-subtype="home"] ytd-feed-filter-chip-bar-renderer,
+body.quick-block-focus-mode ytd-browse[page-subtype="home"] #chips-wrapper {
+    display: none !important;
+}
+
+.qb-focus-msg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 40px 24px;
+    font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.qb-focus-msg-inner {
+    text-align: center;
+    max-width: 460px;
+    color: var(--yt-spec-text-secondary, #aaa);
+}
+.qb-focus-msg-icon { font-size: 44px; line-height: 1; margin-bottom: 16px; opacity: 0.9; }
+.qb-focus-msg-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--yt-spec-text-primary, #f1f1f1);
+    margin-bottom: 8px;
+}
+.qb-focus-msg-text { font-size: 15px; line-height: 1.5; }
