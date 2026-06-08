@@ -170,6 +170,9 @@ async function render() {
     const focusDays = new Set(Array.isArray(settings.focusDays) ? settings.focusDays : []);
     document.querySelectorAll('#focusDays .focus-day').forEach(b =>
         b.classList.toggle('active', focusDays.has(+b.dataset.day)));
+    // While the schedule is on, lock days + times — editing them would dodge the
+    // window. To change them, turn the schedule off first (password-gated).
+    setFocusControlsLocked(!!settings.focusModeEnabled);
     renderFocusStatus();
 
     await loadProfiles();
@@ -243,6 +246,11 @@ function focusActiveNow() {
     const now = new Date(), cur = now.getHours() * 60 + now.getMinutes(), today = now.getDay();
     if (s < e) return cur >= s && cur < e && days.includes(today);
     return (cur >= s && days.includes(today)) || (cur < e && days.includes((today + 6) % 7));
+}
+function setFocusControlsLocked(locked) {
+    document.querySelectorAll('#focusDays .focus-day').forEach(b => { b.disabled = locked; });
+    $('#focusStart').disabled = locked;
+    $('#focusEnd').disabled = locked;
 }
 function renderFocusStatus() {
     const el = $('#focusStatus');
