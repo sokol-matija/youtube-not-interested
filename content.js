@@ -33,6 +33,8 @@
     let focusBeam = true;
     let focusActive = false;
     const FOCUS_MSG_ID = 'quick-block-focus-message';
+    const FOCUS_FAB_ID = 'quick-block-focus-fab';
+    const WATCH_STATS_ID = 'quick-block-watch-stats';
 
     // ── X button (Not Interested) ──────────────────────────────────────────────
     function addBlockButton(videoElement) {
@@ -228,6 +230,7 @@
             applyShareToggle(newSettings.hideShareButton);
             applyThanksToggle(newSettings.hideThanksButton);
             applySearchOnWatchToggle(newSettings.hideSearchOnWatch);
+            applyDescriptionToggle(newSettings.hideDescription);
 
             // Karaoke settings can change while audio is playing — apply live.
             karaokeEnabled = newSettings.karaokeEnabled !== false;
@@ -247,6 +250,14 @@
             if (typeof newSettings.focusMessage === 'string') focusMessage = newSettings.focusMessage;
             focusBeam = newSettings.focusBeam !== false;
             applyFocusMode();
+
+            // Keep the drawer's style picker in sync if the active profile was
+            // changed elsewhere (options page, or the picker in another tab).
+            populateProfileSelect();
+        }
+        // Profiles added/edited/removed in options → refresh the dropdown.
+        if (changes[Storage.KEYS.SUMMARY_PROFILES]) {
+            populateProfileSelect();
         }
     });
 
@@ -283,6 +294,47 @@
     function currentWatchVideoId() {
         const m = location.href.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
         return location.pathname === '/watch' && m ? m[1] : null;
+    }
+
+    // ── Watch stats (views · time ago) ──────────────────────────────────────────
+    // The watch description header holds them in <yt-formatted-string id="info">
+    // as spans: [0]=views, [1]=spacer, [2]=time ago. Fall back to a regex over the
+    // full text if YouTube shifts the span layout.
+    function extractWatchStats() {
+        const info = document.querySelector('yt-formatted-string#info.ytd-watch-info-text');
+        if (!info) return null;
+        const spans = [...info.querySelectorAll('span')];
+        let views = spans[0]?.textContent.trim() || '';
+        let timeAgo = spans[2]?.textContent.trim() || '';
+        if (!/view/i.test(views) || !/ago/i.test(timeAgo)) {
+            const full = info.textContent.replace(/\s+/g, ' ').trim();
+            const m = full.match(/([\d.,]+\s*[KMB]?\s*views?)\s+(.+?ago)/i);
+            if (m) { views = m[1].trim(); timeAgo = m[2].trim(); }
+        }
+        if (!views && !timeAgo) return null;
+        return { views, timeAgo };
+    }
+
+    // Mirror views · time ago into the #actions row (next to like/share). Idempotent:
+    // updates text in place, only writes DOM when the label actually changes.
+    function injectWatchStats() {
+        if (!currentWatchVideoId()) return;
+        const stats = extractWatchStats();
+        if (!stats) return;
+        const actions = document.querySelector('ytd-watch-metadata #actions');
+        if (!actions) return;
+        const label = [stats.views, stats.timeAgo].filter(Boolean).join(' · ');
+        let el = document.getElementById(WATCH_STATS_ID);
+        if (el) {
+            if (el.dataset.label !== label) { el.textContent = label; el.dataset.label = label; }
+            return;
+        }
+        el = document.createElement('div');
+        el.id = WATCH_STATS_ID;
+        el.className = 'quick-block-watch-stats';
+        el.textContent = label;
+        el.dataset.label = label;
+        actions.appendChild(el);
     }
 
     // ── Scheduled Focus Mode ───────────────────────────────────────────────────
@@ -338,6 +390,7 @@
         focusActive = on;
         if (on) injectFocusMessage();
         else removeFocusMessage();
+        syncFocusFabState();
     }
 
     function injectFocusMessage() {
@@ -380,6 +433,61 @@
 
     function removeFocusMessage() {
         document.getElementById(FOCUS_MSG_ID)?.remove();
+    }
+
+    function getFocusFab() { return document.getElementById(FOCUS_FAB_ID); }
+
+    // Masthead toggle next to the avatar — flip the manual "hide home feed now"
+    // override so you can start focusing without opening the options page. This
+    // only touches focusHideNow (the free override), never focusModeEnabled (the
+    // password-gated schedule), so it can't be used to dodge a scheduled window.
+    function injectFocusFab() {
+        if (getFocusFab()) return;
+
+        const end = document.querySelector('ytd-masthead #end')
+            || document.querySelector('ytd-masthead #buttons')
+            || document.querySelector('#masthead-container #end');
+        if (!end) {
+            setTimeout(injectFocusFab, 300);
+            return;
+        }
+
+        const fab = document.createElement('button');
+        fab.id = FOCUS_FAB_ID;
+        fab.type = 'button';
+        fab.className = 'qb-sum-fab qb-sum-fab-masthead qb-focus-fab';
+        fab.setAttribute('aria-label', 'Toggle focus mode');
+        fab.innerHTML = `
+            <svg class="qb-focus-fab-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+        `;
+
+        // Place immediately before the avatar button so it sits right next to it.
+        const avatar = end.querySelector('#avatar-btn')
+            || end.querySelector('ytd-topbar-menu-button-renderer:last-of-type')
+            || end.querySelector('yt-img-shadow');
+        const anchor = avatar?.closest('ytd-topbar-menu-button-renderer, yt-button-shape, #avatar-btn') || avatar;
+        if (anchor && anchor.parentElement === end) {
+            end.insertBefore(fab, anchor);
+        } else {
+            end.insertBefore(fab, end.firstChild);
+        }
+
+        fab.addEventListener('click', () => {
+            // Toggle the manual override against whatever's showing right now: if
+            // the home feed is hidden, reveal it; otherwise hide it and focus.
+            Storage.setSettings({ focusHideNow: !focusActive });
+        });
+
+        syncFocusFabState();
+    }
+
+    function syncFocusFabState() {
+        const fab = getFocusFab();
+        if (!fab) return;
+        fab.classList.toggle('qb-focus-fab-active', focusActive);
+        fab.title = focusActive ? 'Focus mode on — show home feed' : 'Start focusing — hide home feed';
     }
 
     async function ensureVideoPlaying(timeoutMs = 4000) {
@@ -533,6 +641,8 @@
     // ── Summary panel ──────────────────────────────────────────────────────────
     const SUMMARY_PANEL_ID = 'quick-block-summary-panel';
     const SUMMARY_FAB_ID = 'quick-block-summary-fab';
+    const DESC_TOGGLE_ID = 'quick-block-desc-toggle';
+    let hideDescription = false;   // persisted pref: hide the watch description box
     const SUMMARY_TOAST_ID = 'quick-block-summary-toast';
     const SUMMARY_PLAYER_ID = 'qb-sum-player';
     const KARAOKE_ID = 'qb-karaoke';
@@ -629,6 +739,7 @@
         summaryState.videoId = vid;
         injectSummaryDrawer();
         injectSummaryFab();
+        injectDescriptionToggle();
         injectTtsFab();
         restoreCachedSummary(vid);
     }
@@ -646,6 +757,7 @@
         summaryState.statusText = entry.statusText || '';
         summaryState.summarized = true;
         syncTtsFabState();
+        syncSummaryControls();
 
         // When either auto-toggle is on, a cached entry should still trigger TTS —
         // user opened the page expecting it to play.
@@ -692,6 +804,19 @@
                         <button class="qb-sum-close" type="button" aria-label="Close">✕</button>
                     </div>
                 </header>
+                <div class="qb-sum-controls">
+                    <label class="qb-sum-profile-wrap">
+                        <span class="qb-sum-profile-cap">Style</span>
+                        <select class="qb-sum-profile" aria-label="Summary style" title="Which system prompt to summarize with"></select>
+                    </label>
+                    <button class="qb-sum-regen" type="button" title="Generate a fresh summary with the selected style">
+                        <svg class="qb-sum-regen-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                        </svg>
+                        <span class="qb-sum-regen-label">Generate</span>
+                    </button>
+                </div>
                 <div class="qb-sum-status"></div>
                 <div class="qb-sum-actions" hidden>
                     <button class="qb-sum-copy" type="button">Copy summary</button>
@@ -706,6 +831,19 @@
         root.querySelector('.qb-sum-close').addEventListener('click', closeDrawer);
         root.querySelector('.qb-sum-copy').addEventListener('click', copySummary);
         root.querySelector('.qb-sum-read').addEventListener('click', () => readSummary());
+
+        // Pick the summary style (= which system prompt) right from the drawer.
+        // Saved to settings so it persists and matches the options page.
+        root.querySelector('.qb-sum-profile').addEventListener('change', (e) => {
+            Storage.setSettings({ activeSummaryProfileId: e.target.value });
+        });
+        // Regenerate: re-run with the currently selected style, overwriting cache.
+        root.querySelector('.qb-sum-regen').addEventListener('click', () => {
+            if (summaryState.running) return;
+            runSummarize();
+        });
+        populateProfileSelect();
+        syncSummaryControls();
 
         // Click-outside dismissal — installed once per page load (not per inject call).
         // Uses live getElementById so SPA re-injections don't accumulate stale closures.
@@ -729,6 +867,48 @@
         root.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') closeDrawer();
         });
+    }
+
+    // Fill the style dropdown from saved profiles + select the active one. Built
+    // via DOM nodes (not innerHTML) so custom profile names can't inject markup.
+    async function populateProfileSelect() {
+        const sel = getSummaryDrawer()?.querySelector('.qb-sum-profile');
+        if (!sel) return;
+        let profiles, settings;
+        try {
+            [profiles, settings] = await Promise.all([
+                Storage.getSummaryProfiles(),
+                Storage.getSettings(),
+            ]);
+        } catch { return; }
+        const active = settings.activeSummaryProfileId || 'standard';
+        const sig = profiles.map(p => `${p.id}:${p.name}`).join('|');
+        if (sel.dataset.sig !== sig) {  // skip rebuild if unchanged (don't clobber open dropdown)
+            sel.dataset.sig = sig;
+            sel.replaceChildren(...profiles.map(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name;
+                return opt;
+            }));
+        }
+        sel.value = profiles.some(p => p.id === active) ? active : (profiles[0]?.id || '');
+    }
+
+    // Reflect run state on the drawer controls: lock the picker + button while a
+    // summary is generating, and label the button for what a click will do.
+    function syncSummaryControls() {
+        const drawer = getSummaryDrawer();
+        if (!drawer) return;
+        const running = summaryState.running;
+        const sel = drawer.querySelector('.qb-sum-profile');
+        if (sel) sel.disabled = running;
+        const regen = drawer.querySelector('.qb-sum-regen');
+        if (regen) {
+            regen.disabled = running;
+            const label = regen.querySelector('.qb-sum-regen-label');
+            if (label) label.textContent = running ? 'Generating…' : (summaryState.summarized ? 'Regenerate' : 'Generate');
+        }
     }
 
     function injectSummaryFab() {
@@ -789,6 +969,48 @@
         });
 
         if (summaryState.running) fab.classList.add('qb-sum-fab-running');
+    }
+
+    // Feather icons (same lib as the summary FAB / regen button).
+    const EYE_OFF_SVG = `<svg class="qb-sum-toggle-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+    const EYE_SVG = `<svg class="qb-sum-toggle-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+
+    // Body-class hide, same mechanism as the share/thanks/comments toggles — CSS
+    // hides #description via a body-scoped selector, so it survives the description
+    // box rebuilding on SPA nav without any per-element reapply.
+    function applyDescriptionToggle(on) {
+        hideDescription = !!on;
+        document.body.classList.toggle('quick-block-hide-description', hideDescription);
+        syncDescriptionToggle();
+    }
+
+    // Inline "hide description" toggle, placed inside #subscribe-button next to the
+    // channel controls for fast access. Persists like focusHideNow.
+    function injectDescriptionToggle() {
+        if (!currentWatchVideoId()) return;
+        if (document.getElementById(DESC_TOGGLE_ID)) { syncDescriptionToggle(); return; }
+        const sub = document.querySelector('#subscribe-button');
+        if (!sub) return;
+        const anchor = sub.querySelector('[data-channel-external-id]');
+        if (!anchor) return;
+
+        const btn = document.createElement('button');
+        btn.id = DESC_TOGGLE_ID;
+        btn.type = 'button';
+        btn.className = 'qb-sum-toggle';
+        btn.addEventListener('click', () => {
+            Storage.setSettings({ hideDescription: !hideDescription });
+        });
+        anchor.insertAdjacentElement('afterend', btn);
+        syncDescriptionToggle();
+    }
+
+    function syncDescriptionToggle() {
+        const btn = document.getElementById(DESC_TOGGLE_ID);
+        if (!btn) return;
+        btn.innerHTML = hideDescription ? EYE_SVG : EYE_OFF_SVG;
+        btn.title = hideDescription ? 'Show description' : 'Hide description';
+        btn.setAttribute('aria-label', btn.title);
     }
 
     function injectTtsFab() {
@@ -866,6 +1088,7 @@
         summaryState.statusText = 'Fetching transcript…';
 
         getSummaryFab()?.classList.add('qb-sum-fab-running');
+        syncSummaryControls();
 
         const drawer = getSummaryDrawer();
         const status = drawer?.querySelector('.qb-sum-status');
@@ -883,6 +1106,7 @@
             if (status) status.textContent = '';
             summaryState.running = false;
             getSummaryFab()?.classList.remove('qb-sum-fab-running');
+            syncSummaryControls();
             return;
         }
 
@@ -909,6 +1133,7 @@
                 if (status) status.textContent = '';
                 summaryState.running = false;
                 getSummaryFab()?.classList.remove('qb-sum-fab-running');
+                syncSummaryControls();
                 return;
             }
         } catch (e) {
@@ -917,6 +1142,7 @@
             if (status) status.textContent = '';
             summaryState.running = false;
             getSummaryFab()?.classList.remove('qb-sum-fab-running');
+            syncSummaryControls();
             return;
         }
 
@@ -1017,6 +1243,7 @@
         } finally {
             summaryState.running = false;
             getSummaryFab()?.classList.remove('qb-sum-fab-running');
+            syncSummaryControls();
         }
     }
 
@@ -1684,6 +1911,7 @@
     function removeSummaryUI() {
         document.getElementById(SUMMARY_PANEL_ID)?.remove();
         document.getElementById(SUMMARY_FAB_ID)?.remove();
+        document.getElementById(DESC_TOGGLE_ID)?.remove();
         document.getElementById(SUMMARY_TTS_FAB_ID)?.remove();
         dismissSummaryToast();
         closePlayer();
@@ -1706,19 +1934,20 @@
         applyOnWatchClass();
         applyWatchAutomations();
         applyFocusMode();
+        injectFocusFab();
         removeSummaryUI();
         if (currentWatchVideoId()) {
-            setTimeout(() => { injectSummaryUI(); tryAutoSummarize(); }, 400);
+            setTimeout(() => { injectSummaryUI(); tryAutoSummarize(); injectWatchStats(); }, 400);
         }
     });
     // Also fire on initial load (event may have already passed)
     if (document.readyState === 'complete') {
         applyWatchAutomations();
-        if (currentWatchVideoId()) { injectSummaryUI(); tryAutoSummarize(); }
+        if (currentWatchVideoId()) { injectSummaryUI(); tryAutoSummarize(); injectWatchStats(); }
     } else {
         window.addEventListener('load', () => {
             applyWatchAutomations();
-            if (currentWatchVideoId()) { injectSummaryUI(); tryAutoSummarize(); }
+            if (currentWatchVideoId()) { injectSummaryUI(); tryAutoSummarize(); injectWatchStats(); }
         });
     }
 
@@ -1733,6 +1962,7 @@
         applyShareToggle(settings.hideShareButton);
         applyThanksToggle(settings.hideThanksButton);
         applySearchOnWatchToggle(settings.hideSearchOnWatch);
+        applyDescriptionToggle(settings.hideDescription);
         focusModeEnabled = !!settings.focusModeEnabled;
         focusDays = Array.isArray(settings.focusDays) ? settings.focusDays : [];
         focusStart = settings.focusStart || '09:00';
@@ -1747,6 +1977,7 @@
 
     async function init() {
         await loadStateAndRescan();
+        injectFocusFab();
         processVideos();
         setTimeout(processVideos, 500);
         setTimeout(processVideos, 1500);
@@ -1758,6 +1989,14 @@
             // transitions. Both inject functions are idempotent and bail fast if
             // already mounted, so this is cheap.
             if (currentWatchVideoId() && !getSummaryFab()) injectSummaryUI();
+            // Mirror views · time ago into #actions. Self-heals: the info text and
+            // #actions row mount async after nav. Idempotent, bails fast once set.
+            if (currentWatchVideoId()) injectWatchStats();
+            // Inline "hide description" toggle lives inside YT's subscribe button,
+            // which rebuilds on nav — re-inject only when missing (idempotent, bails
+            // fast once set). The hide state itself is a body class, so CSS reapplies
+            // it to the rebuilt description box with no extra work here.
+            if (currentWatchVideoId() && !document.getElementById(DESC_TOGGLE_ID)) injectDescriptionToggle();
             // Same self-heal for auto-open comments — the comments toggle often
             // mounts after yt-navigate-finish, leaving the original click attempt
             // with nothing to click. Latched per videoId so we don't spam clicks.
@@ -1768,6 +2007,9 @@
             // message only when it's actually missing. Re-injecting every tick
             // would write the DOM and retrigger this observer → freeze.
             if (focusActive && !document.getElementById(FOCUS_MSG_ID)) injectFocusMessage();
+            // Masthead focus toggle: re-inject only when missing (idempotent,
+            // bails fast once mounted so it can't loop the observer).
+            if (!getFocusFab()) injectFocusFab();
         });
         observer.observe(document.body, { childList: true, subtree: true });
 

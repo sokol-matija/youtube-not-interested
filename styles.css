@@ -173,6 +173,15 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
     color: #fff;
 }
 
+/* Focus toggle FAB — outline moon when idle, filled accent when focus is on. */
+.qb-focus-fab .qb-focus-fab-icon { display: block; transition: fill 0.15s, stroke 0.15s; }
+.qb-focus-fab.qb-focus-fab-active { color: #6db4ff; }
+.qb-focus-fab.qb-focus-fab-active .qb-focus-fab-icon { fill: currentColor; stroke: currentColor; }
+.qb-focus-fab.qb-focus-fab-active:hover {
+    background: rgba(109,180,255,0.14);
+    color: #8cc6ff;
+}
+
 /* Green "summary ready" badge on the FAB — same colour as the toast dot.
    Sits on the upper-right corner of the button. Cleared when the drawer opens. */
 .qb-sum-fab.qb-sum-fab-ready::after {
@@ -257,6 +266,11 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
     .qb-sum-fab-masthead:hover {
         background: rgba(0,0,0,0.08);
         border-color: transparent;
+    }
+    .qb-focus-fab.qb-focus-fab-active { color: #1a73e8; }
+    .qb-focus-fab.qb-focus-fab-active:hover {
+        background: rgba(26,115,232,0.12);
+        color: #1a73e8;
     }
     .qb-sum-fab-spinner-track { stroke: rgba(0,0,0,0.10); }
     .qb-sum-fab-spinner-arc { stroke: #1a73e8; }
@@ -678,6 +692,67 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
     color: #fff;
 }
 .qb-sum-min svg { display: block; }
+
+/* Style picker + regenerate row — pick the system prompt and re-run without
+   leaving the page. */
+.qb-sum-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+}
+.qb-sum-profile-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+.qb-sum-profile-cap {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: #909090;
+    flex-shrink: 0;
+}
+.qb-sum-profile {
+    flex: 1;
+    min-width: 0;
+    background: rgba(255,255,255,0.08);
+    color: #f1f1f1;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    padding: 7px 10px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.qb-sum-profile:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.18); }
+.qb-sum-profile:focus-visible { outline: 2px solid #6db4ff; outline-offset: 1px; }
+.qb-sum-profile[disabled] { opacity: 0.5; cursor: default; }
+.qb-sum-profile option { background: #181818; color: #f1f1f1; }
+.qb-sum-regen {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(109,180,255,0.16);
+    color: #cfe6ff;
+    border: none;
+    border-radius: 18px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+.qb-sum-regen:hover { background: rgba(109,180,255,0.28); }
+.qb-sum-regen[disabled] { opacity: 0.6; cursor: default; }
+.qb-sum-regen-icon { display: block; }
+.qb-sum-regen[disabled] .qb-sum-regen-icon { animation: qb-sum-spin 1.1s linear infinite; }
 
 .qb-sum-status {
     font-size: 13px;
@@ -1129,6 +1204,16 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
     .qb-sum-close { color: #606060; }
     .qb-sum-close:hover { background: rgba(0,0,0,0.06); color: #0f0f0f; }
     .qb-sum-status { color: #606060; }
+    .qb-sum-profile-cap { color: #606060; }
+    .qb-sum-profile {
+        background: rgba(0,0,0,0.05);
+        color: #0f0f0f;
+        border-color: rgba(0,0,0,0.12);
+    }
+    .qb-sum-profile:hover { background: rgba(0,0,0,0.08); border-color: rgba(0,0,0,0.2); }
+    .qb-sum-profile option { background: #fff; color: #0f0f0f; }
+    .qb-sum-regen { background: rgba(26,115,232,0.14); color: #1a4f8a; }
+    .qb-sum-regen:hover { background: rgba(26,115,232,0.24); }
     .qb-sum-body {
         background: rgba(0,0,0,0.04);
         border-color: rgba(0,0,0,0.08);
@@ -1209,4 +1294,55 @@ body.quick-block-focus-mode ytd-browse[page-subtype="home"] #scroll-container {
     .qb-focus-title { color: #0f0f0f; }
     .qb-focus-sub { color: #555; }
     .qb-focus-left { color: #0f0f0f; }
+}
+
+/* Watch stats pill (views · time ago) injected into #actions */
+#quick-block-watch-stats {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 12px;
+    padding: 0 6px;
+    font-size: 1.8rem;
+    font-weight: 600;
+    line-height: 36px;
+    white-space: nowrap;
+    color: var(--yt-spec-text-secondary, #606060);
+}
+@media (prefers-color-scheme: dark) {
+    #quick-block-watch-stats { color: var(--yt-spec-text-secondary, #aaa); }
+}
+
+/* Inline "hide description" toggle — icon-only circular button matching YouTube's
+   chip buttons. Themed via YT's html[dark] attribute (in-app theme, not the OS). */
+.qb-sum-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    margin-left: 8px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    background: rgba(0,0,0,0.05);
+    color: #0f0f0f;
+    transition: background 0.15s ease;
+}
+.qb-sum-toggle:hover { background: rgba(0,0,0,0.1); }
+.qb-sum-toggle-icon { flex: 0 0 auto; }
+
+/* Dark theme (YouTube sets [dark] on <html>) */
+html[dark] .qb-sum-toggle,
+[dark] .qb-sum-toggle {
+    background: rgba(255,255,255,0.1);
+    color: #f1f1f1;
+}
+html[dark] .qb-sum-toggle:hover,
+[dark] .qb-sum-toggle:hover { background: rgba(255,255,255,0.2); }
+
+/* Hide watch description box (toggled via the inline button) */
+body.quick-block-hide-description ytd-watch-metadata #description {
+    display: none !important;
 }
