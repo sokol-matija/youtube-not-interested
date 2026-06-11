@@ -143,6 +143,11 @@ body.quick-block-hide-thanks button[aria-label="Thanks"] {
     display: none !important;
 }
 
+/* Hide teaser carousel */
+body.quick-block-hide-teaser-carousel #teaser-carousel {
+    display: none !important;
+}
+
 /* Hide search bar on /watch pages */
 body.quick-block-on-watch.quick-block-hide-search-watch ytd-masthead #center {
     display: none !important;
@@ -251,6 +256,65 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
 .qb-focus-fab.qb-focus-fab-active:hover {
     background: rgba(109,180,255,0.14);
     color: #8cc6ff;
+}
+/* Locked: amber tint, can't be toggled off without the password. */
+.qb-focus-fab.qb-focus-fab-locked { color: #ffce6b; }
+.qb-focus-fab.qb-focus-fab-locked .qb-focus-fab-icon { fill: currentColor; stroke: currentColor; }
+
+/* Hover dropdown to start a timed locked focus session. */
+.qb-focus-fab-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+.qb-focus-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    min-width: 168px;
+    padding: 6px;
+    background: #282828;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.45);
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 2200;
+}
+/* Show on hover of the wrapper; hidden entirely while a lock is active. */
+.qb-focus-fab-wrap:hover .qb-focus-menu { display: flex; }
+.qb-focus-fab-wrap.qb-focus-locked:hover .qb-focus-menu { display: none; }
+.qb-focus-menu-head {
+    padding: 4px 10px 6px;
+    font: 500 12px/1.4 "Roboto", "Arial", sans-serif;
+    color: rgba(255,255,255,0.55);
+}
+.qb-focus-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    color: #f1f1f1;
+    font: 400 13px/1.2 "Roboto", "Arial", sans-serif;
+    cursor: pointer;
+}
+.qb-focus-menu-item:hover { background: rgba(255,255,255,0.10); }
+
+@media (prefers-color-scheme: light) {
+    .qb-focus-menu {
+        background: #fff;
+        border-color: rgba(0,0,0,0.12);
+        box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+    }
+    .qb-focus-menu-head { color: rgba(0,0,0,0.5); }
+    .qb-focus-menu-item { color: #0f0f0f; }
+    .qb-focus-menu-item:hover { background: rgba(0,0,0,0.06); }
+    .qb-focus-fab.qb-focus-fab-locked { color: #b8860b; }
 }
 
 /* Green "summary ready" badge on the FAB — same colour as the toast dot.

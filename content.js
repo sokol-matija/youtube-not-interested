@@ -32,6 +32,16 @@
     let focusMessage = 'You are free, do something that matters';
     let focusBeam = true;
     let focusActive = false;
+    let focusLockUntil = 0;              // epoch ms: timed FAB lock; 0 = not locked
+    // Friction (not security): same password as the options-page schedule unlock.
+    const FOCUS_UNLOCK = 'j5q8rqwp521c1';
+    const FOCUS_LOCK_DURATIONS = [       // dropdown on the masthead focus FAB
+        { min: 10,    label: '10 min' },
+        { min: 15,    label: '15 min' },
+        { min: 30,    label: '30 min' },
+        { min: 60,    label: '1 hour' },
+        { min: 'rest', label: 'Rest of day' },
+    ];
     const FOCUS_MSG_ID = 'quick-block-focus-message';
     const FOCUS_FAB_ID = 'quick-block-focus-fab';
     const WATCH_STATS_ID = 'quick-block-watch-stats';
@@ -201,6 +211,10 @@
         document.body.classList.toggle('quick-block-hide-share', !!on);
     }
 
+    function applyTeaserCarouselToggle(on) {
+        document.body.classList.toggle('quick-block-hide-teaser-carousel', !!on);
+    }
+
     function applyThanksToggle(on) {
         document.body.classList.toggle('quick-block-hide-thanks', !!on);
     }
@@ -231,6 +245,7 @@
             applyThanksToggle(newSettings.hideThanksButton);
             applySearchOnWatchToggle(newSettings.hideSearchOnWatch);
             applyDescriptionToggle(newSettings.hideDescription);
+            applyTeaserCarouselToggle(newSettings.hideTeaserCarousel);
 
             // Karaoke settings can change while audio is playing — apply live.
             karaokeEnabled = newSettings.karaokeEnabled !== false;
@@ -249,6 +264,7 @@
             focusHideNow = !!newSettings.focusHideNow;
             if (typeof newSettings.focusMessage === 'string') focusMessage = newSettings.focusMessage;
             focusBeam = newSettings.focusBeam !== false;
+            focusLockUntil = Number(newSettings.focusLockUntil) || 0;
             applyFocusMode();
 
             // Keep the drawer's style picker in sync if the active profile was
@@ -357,7 +373,15 @@
         return false;
     }
 
+    function focusLocked() { return focusLockUntil > Date.now(); }
+
+    // Minutes left on the timed FAB lock (0 if not locked / expired).
+    function focusLockMinutesLeft() {
+        return focusLocked() ? Math.ceil((focusLockUntil - Date.now()) / 60000) : 0;
+    }
+
     function focusShouldBeOn() {
+        if (focusLocked()) return true; // timed lock forces focus on
         if (focusHideNow) return true;  // manual override
         return focusModeEnabled && isInFocusWindow(new Date(), focusDays, focusStart, focusEnd);
     }
@@ -385,6 +409,11 @@
     }
 
     function applyFocusMode() {
+        // Timed lock expired → clear it once so focus can fall back to schedule.
+        if (focusLockUntil && focusLockUntil <= Date.now()) {
+            focusLockUntil = 0;
+            Storage.setSettings({ focusLockUntil: 0 });
+        }
         const on = focusShouldBeOn();
         document.body.classList.toggle('quick-block-focus-mode', on);
         focusActive = on;
@@ -452,6 +481,11 @@
             return;
         }
 
+        // Wrapper keeps the FAB and its hover dropdown together so the menu stays
+        // open while the pointer travels from button to menu.
+        const wrap = document.createElement('div');
+        wrap.className = 'qb-focus-fab-wrap';
+
         const fab = document.createElement('button');
         fab.id = FOCUS_FAB_ID;
         fab.type = 'button';
@@ -463,18 +497,45 @@
             </svg>
         `;
 
+        // Hover dropdown — start a timed locked focus session.
+        const menu = document.createElement('div');
+        menu.className = 'qb-focus-menu';
+        menu.innerHTML = `<div class="qb-focus-menu-head">Lock focus for…</div>`
+            + FOCUS_LOCK_DURATIONS
+                .map((d) => `<button type="button" class="qb-focus-menu-item" data-min="${d.min}">${d.label}</button>`)
+                .join('');
+        menu.addEventListener('click', (e) => {
+            const item = e.target.closest('.qb-focus-menu-item');
+            if (!item) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const raw = item.dataset.min;
+            startLockedFocus(raw === 'rest' ? 'rest' : Number(raw));
+            wrap.classList.remove('qb-focus-menu-open');
+        });
+
+        wrap.appendChild(fab);
+        wrap.appendChild(menu);
+
         // Place immediately before the avatar button so it sits right next to it.
         const avatar = end.querySelector('#avatar-btn')
             || end.querySelector('ytd-topbar-menu-button-renderer:last-of-type')
             || end.querySelector('yt-img-shadow');
         const anchor = avatar?.closest('ytd-topbar-menu-button-renderer, yt-button-shape, #avatar-btn') || avatar;
         if (anchor && anchor.parentElement === end) {
-            end.insertBefore(fab, anchor);
+            end.insertBefore(wrap, anchor);
         } else {
-            end.insertBefore(fab, end.firstChild);
+            end.insertBefore(wrap, end.firstChild);
         }
 
         fab.addEventListener('click', () => {
+            if (focusLocked()) {                             // locked → password to exit early
+                const pw = prompt(`Focus locked for ${fmtFocusLeft(focusLockMinutesLeft())}. Enter password to unlock early:`);
+                if (pw === null) return;
+                if (pw !== FOCUS_UNLOCK) { syncFocusFabState(); return; }
+                Storage.setSettings({ focusLockUntil: 0, focusHideNow: false });
+                return;
+            }
             // Toggle the manual override against whatever's showing right now: if
             // the home feed is hidden, reveal it; otherwise hide it and focus.
             Storage.setSettings({ focusHideNow: !focusActive });
@@ -483,11 +544,31 @@
         syncFocusFabState();
     }
 
+    // Begin a timed locked focus session. minutes is a number or 'rest' (until
+    // local midnight). focusHideNow forces focus on; focusLockUntil pins it there
+    // until the timer expires or the password is entered on the FAB.
+    function startLockedFocus(minutes) {
+        let until;
+        if (minutes === 'rest') {
+            const d = new Date();
+            d.setHours(23, 59, 59, 999);
+            until = d.getTime();
+        } else {
+            until = Date.now() + minutes * 60000;
+        }
+        Storage.setSettings({ focusHideNow: true, focusLockUntil: until });
+    }
+
     function syncFocusFabState() {
         const fab = getFocusFab();
         if (!fab) return;
+        const locked = focusLocked();
         fab.classList.toggle('qb-focus-fab-active', focusActive);
-        fab.title = focusActive ? 'Focus mode on — show home feed' : 'Start focusing — hide home feed';
+        fab.classList.toggle('qb-focus-fab-locked', locked);
+        fab.closest('.qb-focus-fab-wrap')?.classList.toggle('qb-focus-locked', locked);
+        fab.title = locked
+            ? `Focus locked — ${fmtFocusLeft(focusLockMinutesLeft())} left (click to unlock)`
+            : (focusActive ? 'Focus mode on — show home feed' : 'Start focusing — hide home feed · hover to lock');
     }
 
     async function ensureVideoPlaying(timeoutMs = 4000) {
@@ -1104,9 +1185,12 @@
     // Reveal the chapters switch button once the user opens chapters via the player's
     // chapter-title control. Capture phase so YouTube's own handler still runs too.
     document.addEventListener('click', (e) => {
-        if (e.target?.closest?.('.ytp-chapter-title.ytp-button') && !chaptersActivated) {
-            chaptersActivated = true;
-            injectPlaylistToggle();
+        if (e.target?.closest?.('.ytp-chapter-title.ytp-button')) {
+            if (!chaptersActivated) {
+                chaptersActivated = true;
+                injectPlaylistToggle();
+            }
+            applyPlaylistPanelMode('chapters');   // switch toggle to chapters on open
         }
     }, true);
 
@@ -2107,6 +2191,7 @@
         applyThanksToggle(settings.hideThanksButton);
         applySearchOnWatchToggle(settings.hideSearchOnWatch);
         applyDescriptionToggle(settings.hideDescription);
+        applyTeaserCarouselToggle(settings.hideTeaserCarousel);
         resetPlaylistPanelState();   // no memory — derive from current URL
         applyPlaylistPanelMode();
         focusModeEnabled = !!settings.focusModeEnabled;
@@ -2116,6 +2201,7 @@
         focusHideNow = !!settings.focusHideNow;
         if (typeof settings.focusMessage === 'string') focusMessage = settings.focusMessage;
         focusBeam = settings.focusBeam !== false;
+        focusLockUntil = Number(settings.focusLockUntil) || 0;
         applyOnWatchClass();
         applyFocusMode();
         rescanAll();

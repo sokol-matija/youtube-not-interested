@@ -152,6 +152,7 @@ async function render() {
     $('#hideThanksToggle').checked       = !!settings.hideThanksButton;
     $('#hideSearchOnWatchToggle').checked = !!settings.hideSearchOnWatch;
     $('#hideDescriptionToggle').checked  = !!settings.hideDescription;
+    $('#hideTeaserCarouselToggle').checked = !!settings.hideTeaserCarousel;
     $('#autoSummarizeToggle').checked    = !!settings.autoSummarize;
     $('#autoTtsToggle').checked          = !!settings.autoTts;
     $('#karaokeToggle').checked          = settings.karaokeEnabled !== false;
@@ -225,6 +226,7 @@ $('#hideShareToggle').addEventListener('change', e => Storage.setSettings({ hide
 $('#hideThanksToggle').addEventListener('change', e => Storage.setSettings({ hideThanksButton: e.target.checked }));
 $('#hideSearchOnWatchToggle').addEventListener('change', e => Storage.setSettings({ hideSearchOnWatch: e.target.checked }));
 $('#hideDescriptionToggle').addEventListener('change', e => Storage.setSettings({ hideDescription: e.target.checked }));
+$('#hideTeaserCarouselToggle').addEventListener('change', e => Storage.setSettings({ hideTeaserCarousel: e.target.checked }));
 $('#autoSummarizeToggle').addEventListener('change', e => Storage.setSettings({ autoSummarize: e.target.checked }));
 $('#autoTtsToggle').addEventListener('change', e => Storage.setSettings({ autoTts: e.target.checked }));
 $('#karaokeToggle').addEventListener('change', e => Storage.setSettings({ karaokeEnabled: e.target.checked }));
