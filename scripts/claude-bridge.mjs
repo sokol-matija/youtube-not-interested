@@ -174,67 +174,6 @@ const server = http.createServer(async (req, res) => {
         }
     }
 
-    // Streaming endpoint — emits SSE tokens as Claude writes them.
-    // Each event: data: {"text":"…"}\n\n  |  final: data: {"done":true,"ok":true,"elapsedMs":N}\n\n
-    if (req.method === 'POST' && req.url === '/run-stream') {
-        try {
-            const body = await readBody(req);
-            const { prompt, model } = JSON.parse(body || '{}');
-            if (typeof prompt !== 'string' || prompt.length === 0) {
-                res.writeHead(400, { 'Content-Type': 'application/json', ...headers });
-                return res.end(JSON.stringify({ ok: false, error: 'missing prompt' }));
-            }
-            if (prompt.length > MAX_INPUT_CHARS) {
-                res.writeHead(413, { 'Content-Type': 'application/json', ...headers });
-                return res.end(JSON.stringify({ ok: false, error: 'prompt too long' }));
-            }
-
-            res.writeHead(200, {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                ...headers,
-            });
-
-            const t0 = Date.now();
-            const args = ['-p', '--model', model || DEFAULT_MODEL];
-            const proc = spawn(CLAUDE_BIN, args, { stdio: ['pipe', 'pipe', 'pipe'] });
-            let spawnErr = null;
-            let totalChars = 0;
-            let stderrBuf = '';
-
-            proc.on('error', e => {
-                spawnErr = e;
-                res.write(`data: ${JSON.stringify({ ok: false, error: e.message })}\n\n`);
-                res.end();
-            });
-
-            proc.stdout.on('data', chunk => {
-                const text = chunk.toString();
-                totalChars += text.length;
-                res.write(`data: ${JSON.stringify({ text })}\n\n`);
-            });
-
-            proc.stderr.on('data', d => { stderrBuf += d; });
-
-            proc.on('close', code => {
-                if (spawnErr) return;
-                const ms = Date.now() - t0;
-                console.log(`[${new Date().toISOString()}] /run-stream ${prompt.length}ch → ${totalChars}ch in ${ms}ms (exit ${code})`);
-                res.write(`data: ${JSON.stringify({ done: true, ok: code === 0, elapsedMs: ms, error: code !== 0 ? stderrBuf.trim() : null })}\n\n`);
-                res.end();
-            });
-
-            try { proc.stdin.write(prompt); proc.stdin.end(); } catch {}
-        } catch (e) {
-            if (!res.headersSent) {
-                res.writeHead(500, { 'Content-Type': 'application/json', ...headers });
-                res.end(JSON.stringify({ ok: false, error: e.message }));
-            }
-        }
-        return;
-    }
-
     if (req.method !== 'POST' || req.url !== '/run') {
         res.writeHead(404, headers);
         return res.end('not found');
