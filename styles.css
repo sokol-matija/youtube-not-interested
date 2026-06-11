@@ -62,6 +62,77 @@ body.quick-block-hide-comments ytd-comments#comments {
     display: none !important;
 }
 
+/* Playlist watch page: show exactly one column panel at a time, picked by the
+   button row in the title. Each mode hides the other two panels.
+   Comments may be inline (ytd-comments#comments) or an engagement panel (#panels);
+   chapters is the macro-markers engagement panel. */
+body.quick-block-pl-only ytd-comments#comments,
+body.quick-block-pl-only ytd-engagement-panel-section-list-renderer[target-id*="comments"],
+body.quick-block-pl-only ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-macro-markers-description-chapters"] {
+    display: none !important;
+}
+body.quick-block-cm-only ytd-playlist-panel-renderer#playlist,
+body.quick-block-cm-only ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-macro-markers-description-chapters"] {
+    display: none !important;
+}
+body.quick-block-ch-only ytd-playlist-panel-renderer#playlist,
+body.quick-block-ch-only ytd-comments#comments,
+body.quick-block-ch-only ytd-engagement-panel-section-list-renderer[target-id*="comments"] {
+    display: none !important;
+}
+
+/* Title row hosts the button group on its right edge; <h1> title stays left */
+ytd-watch-metadata #title:has(.qb-pl-pill) {
+    display: flex;
+    align-items: center;
+}
+.qb-pl-pill {
+    flex: 0 0 auto;
+    margin-left: auto;       /* push to the right edge of the title row */
+    align-self: center;
+    display: flex;
+    gap: 6px;
+}
+
+/* Individual circular buttons, matching the hide-description toggle */
+.qb-pl-seg {
+    appearance: none;
+    border: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    color: #0f0f0f;
+    background: rgba(0, 0, 0, 0.05);
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.qb-pl-seg * { pointer-events: none; }
+.qb-pl-seg svg { display: block; }
+.qb-pl-seg:hover { background: rgba(0, 0, 0, 0.1); }
+.qb-pl-seg-active {
+    color: #fff;
+    background: #0f0f0f;
+}
+
+/* Dark theme */
+html[dark] .qb-pl-seg,
+[dark] .qb-pl-seg {
+    color: #f1f1f1;
+    background: rgba(255, 255, 255, 0.1);
+}
+html[dark] .qb-pl-seg:hover,
+[dark] .qb-pl-seg:hover { background: rgba(255, 255, 255, 0.2); }
+html[dark] .qb-pl-seg-active,
+[dark] .qb-pl-seg-active {
+    color: #0f0f0f;
+    background: #f1f1f1;
+}
+
 /* Hide Share button */
 body.quick-block-hide-share button[aria-label="Share"] {
     display: none !important;

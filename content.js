@@ -643,6 +643,12 @@
     const SUMMARY_FAB_ID = 'quick-block-summary-fab';
     const DESC_TOGGLE_ID = 'quick-block-desc-toggle';
     let hideDescription = false;   // persisted pref: hide the watch description box
+
+    // Playlist watch pages stack the playlist panel + comments in the same column.
+    // This segmented pill shows exactly one at a time. 'playlist' = hide comments,
+    // 'comments' = hide playlist panel. Body-class driven so it survives SPA rebuilds.
+    const PLAYLIST_TOGGLE_ID = 'quick-block-playlist-toggle';
+    let playlistPanelMode = 'comments';   // per-video state (no memory): 'playlist' | 'comments' | 'chapters'
     const SUMMARY_TOAST_ID = 'quick-block-summary-toast';
     const SUMMARY_PLAYER_ID = 'qb-sum-player';
     const KARAOKE_ID = 'qb-karaoke';
@@ -740,6 +746,7 @@
         injectSummaryDrawer();
         injectSummaryFab();
         injectDescriptionToggle();
+        injectPlaylistToggle();
         injectTtsFab();
         restoreCachedSummary(vid);
     }
@@ -983,6 +990,125 @@
         document.body.classList.toggle('quick-block-hide-description', hideDescription);
         syncDescriptionToggle();
     }
+
+    // Playlist detection is URL-based (KISS): a real playlist watch URL always carries
+    // an `index=` param, e.g. ?v=…&list=…&index=1. DOM probing was unreliable.
+    function isPlaylistUrl() {
+        return new URLSearchParams(location.search).has('index');
+    }
+
+    // Chapters is opt-in per video: the chapters button only appears after the user
+    // clicks the player's chapter title (.ytp-chapter-title.ytp-button), which is what
+    // opens YouTube's chapters panel. Reset to false on every navigation.
+    let chaptersActivated = false;
+
+    // Feather-style icons, one per mode.
+    const PL_ICON_PLAYLIST = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><polygon points="3 5 3 19 6 12"/></svg>`;
+    const PL_ICON_COMMENTS = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
+    const PL_ICON_CHAPTERS = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="9" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="9" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1.4"/><circle cx="4" cy="12" r="1.4"/><circle cx="4" cy="18" r="1.4"/></svg>`;
+
+    // Ordered mode table: key → body class, button label/icon. Priority is table order.
+    const PLAYLIST_MODES = [
+        { key: 'playlist', cls: 'quick-block-pl-only', label: 'Show playlist', icon: PL_ICON_PLAYLIST },
+        { key: 'comments', cls: 'quick-block-cm-only', label: 'Show comments', icon: PL_ICON_COMMENTS },
+        { key: 'chapters', cls: 'quick-block-ch-only', label: 'Show chapters', icon: PL_ICON_CHAPTERS },
+    ];
+
+    // Which modes are offered on this page: comments always; playlist only on a
+    // playlist URL; chapters only once the user has opened it. Table order = priority.
+    function availablePlaylistModes() {
+        const out = [];
+        if (isPlaylistUrl()) out.push('playlist');
+        out.push('comments');
+        if (chaptersActivated) out.push('chapters');
+        return out;
+    }
+
+    // Per-video default: playlist if the URL is a playlist, else comments. No memory —
+    // reset on every nav (see yt-navigate-finish / resetPlaylistPanelState).
+    function defaultPlaylistMode() {
+        return isPlaylistUrl() ? 'playlist' : 'comments';
+    }
+
+    function resetPlaylistPanelState() {
+        chaptersActivated = false;
+        playlistPanelMode = defaultPlaylistMode();
+    }
+
+    // Toggle the mutually-exclusive body classes — show the current panel, hide the
+    // others. Active only when there's a choice (≥2 modes), so untouched normal videos
+    // are never altered. Classes persist across SPA nav, so clear them otherwise.
+    // Passing `mode` switches the panel (an explicit user click).
+    function applyPlaylistPanelMode(mode) {
+        const present = availablePlaylistModes();
+        if (mode && present.includes(mode)) playlistPanelMode = mode;
+        if (!present.includes(playlistPanelMode)) playlistPanelMode = present[0] || 'comments';
+        const active = present.length >= 2;                  // gate: only when there's a choice
+        const body = document.body.classList;
+        for (const m of PLAYLIST_MODES) {
+            body.toggle(m.cls, active && playlistPanelMode === m.key);
+        }
+        syncPlaylistToggle();
+    }
+
+    // Row of circular buttons anchored at the right edge of the watch-title row.
+    // Re-renders when the offered set of modes changes (playlist URL / chapters opened).
+    function injectPlaylistToggle() {
+        const present = availablePlaylistModes();
+        if (present.length < 2) {                            // nothing to switch between → no buttons
+            document.getElementById(PLAYLIST_TOGGLE_ID)?.remove();
+            applyPlaylistPanelMode();                        // clears the body classes
+            return;
+        }
+        applyPlaylistPanelMode();                            // reflect current mode
+
+        const sig = present.join(',');                       // changes when offered modes change
+        let pill = document.getElementById(PLAYLIST_TOGGLE_ID);
+        if (pill && pill.dataset.modes === sig) { syncPlaylistToggle(); return; }
+
+        if (!pill) {
+            const anchor = document.querySelector('ytd-watch-metadata #title');
+            if (!anchor) return;
+            pill = document.createElement('div');
+            pill.id = PLAYLIST_TOGGLE_ID;
+            pill.className = 'qb-pl-pill';
+            pill.addEventListener('click', (e) => {
+                const seg = e.target.closest('.qb-pl-seg');
+                if (!seg) return;
+                e.preventDefault();
+                e.stopPropagation();
+                applyPlaylistPanelMode(seg.dataset.mode);    // switch (no persistence)
+            });
+            anchor.appendChild(pill);                            // right edge of the title row
+        }
+
+        // (Re)build buttons for the currently-offered modes.
+        pill.dataset.modes = sig;
+        pill.innerHTML = PLAYLIST_MODES
+            .filter((m) => present.includes(m.key))
+            .map((m) => `<button type="button" class="qb-pl-seg" data-mode="${m.key}" title="${m.label}" aria-label="${m.label}">${m.icon}</button>`)
+            .join('');
+        syncPlaylistToggle();
+    }
+
+    function syncPlaylistToggle() {
+        const pill = document.getElementById(PLAYLIST_TOGGLE_ID);
+        if (!pill) return;
+        pill.querySelectorAll('.qb-pl-seg').forEach((seg) => {
+            const active = seg.dataset.mode === playlistPanelMode;
+            seg.classList.toggle('qb-pl-seg-active', active);
+            seg.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+    }
+
+    // Reveal the chapters switch button once the user opens chapters via the player's
+    // chapter-title control. Capture phase so YouTube's own handler still runs too.
+    document.addEventListener('click', (e) => {
+        if (e.target?.closest?.('.ytp-chapter-title.ytp-button') && !chaptersActivated) {
+            chaptersActivated = true;
+            injectPlaylistToggle();
+        }
+    }, true);
 
     // Inline "hide description" toggle, placed inside #subscribe-button next to the
     // channel controls for fast access. Persists like focusHideNow.
@@ -1918,6 +2044,7 @@
         document.getElementById(SUMMARY_PANEL_ID)?.remove();
         document.getElementById(SUMMARY_FAB_ID)?.remove();
         document.getElementById(DESC_TOGGLE_ID)?.remove();
+        document.getElementById(PLAYLIST_TOGGLE_ID)?.remove();
         document.getElementById(SUMMARY_TTS_FAB_ID)?.remove();
         dismissSummaryToast();
         closePlayer();
@@ -1937,6 +2064,8 @@
         commentsAutoOpenedFor = null;
         autoSummarizeTriggeredFor = null;
         autoReadTriggeredFor = null;
+        resetPlaylistPanelState();   // new video → forget chapters/mode, re-derive from URL
+        applyPlaylistPanelMode();
         applyOnWatchClass();
         applyWatchAutomations();
         applyFocusMode();
@@ -1978,6 +2107,8 @@
         applyThanksToggle(settings.hideThanksButton);
         applySearchOnWatchToggle(settings.hideSearchOnWatch);
         applyDescriptionToggle(settings.hideDescription);
+        resetPlaylistPanelState();   // no memory — derive from current URL
+        applyPlaylistPanelMode();
         focusModeEnabled = !!settings.focusModeEnabled;
         focusDays = Array.isArray(settings.focusDays) ? settings.focusDays : [];
         focusStart = settings.focusStart || '09:00';
@@ -2012,6 +2143,12 @@
             // fast once set). The hide state itself is a body class, so CSS reapplies
             // it to the rebuilt description box with no extra work here.
             if (currentWatchVideoId() && !document.getElementById(DESC_TOGGLE_ID)) injectDescriptionToggle();
+            // Playlist panel mounts async after nav and is absent on non-playlist
+            // pages. Reconcile every tick (not just when missing): the pill must
+            // also disappear if the playlist panel is closed while it's mounted.
+            // injectPlaylistToggle is idempotent — bails fast when state is settled,
+            // removes the pill + clears the body classes when no panel is present.
+            if (currentWatchVideoId()) injectPlaylistToggle();
             // Same self-heal for auto-open comments — the comments toggle often
             // mounts after yt-navigate-finish, leaving the original click attempt
             // with nothing to click. Latched per videoId so we don't spam clicks.
