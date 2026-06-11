@@ -998,8 +998,14 @@
         btn.id = DESC_TOGGLE_ID;
         btn.type = 'button';
         btn.className = 'qb-sum-toggle';
-        btn.addEventListener('click', () => {
-            Storage.setSettings({ hideDescription: !hideDescription });
+        btn.addEventListener('click', (e) => {
+            // Stop the event reaching YouTube's polymer gesture handlers on the
+            // surrounding subscribe renderer, which otherwise eat the interaction.
+            e.preventDefault();
+            e.stopPropagation();
+            const next = !hideDescription;
+            applyDescriptionToggle(next);                    // instant feedback
+            Storage.setSettings({ hideDescription: next });  // persist (onChanged re-applies, idempotent)
         });
         anchor.insertAdjacentElement('afterend', btn);
         syncDescriptionToggle();
@@ -1938,6 +1944,15 @@
         removeSummaryUI();
         if (currentWatchVideoId()) {
             setTimeout(() => { injectSummaryUI(); tryAutoSummarize(); injectWatchStats(); }, 400);
+        } else {
+            // Landing on a feed page (home/subscriptions). YouTube's SPA restores
+            // cached feed nodes that still carry the HIDE_CHECKED_ATTR latch from a
+            // previous visit, so videos added to Watch Later this session never get
+            // re-evaluated — looked like the page needed a manual refresh. rescanAll()
+            // clears the latch and re-checks. Re-run because the feed mounts async.
+            rescanAll();
+            setTimeout(rescanAll, 300);
+            setTimeout(rescanAll, 1000);
         }
     });
     // Also fire on initial load (event may have already passed)

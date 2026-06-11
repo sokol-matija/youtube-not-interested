@@ -1319,6 +1319,9 @@ body.quick-block-focus-mode ytd-browse[page-subtype="home"] #scroll-container {
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
+    position: relative;   /* sit above the subscribe button's ripple overlay */
+    z-index: 100;
+    pointer-events: auto;
     width: 36px;
     height: 36px;
     margin-left: 8px;
@@ -1330,6 +1333,7 @@ body.quick-block-focus-mode ytd-browse[page-subtype="home"] #scroll-container {
     color: #0f0f0f;
     transition: background 0.15s ease;
 }
+.qb-sum-toggle * { pointer-events: none; }   /* clicks always resolve to the button, not the inner SVG */
 .qb-sum-toggle:hover { background: rgba(0,0,0,0.1); }
 .qb-sum-toggle-icon { flex: 0 0 auto; }
 
