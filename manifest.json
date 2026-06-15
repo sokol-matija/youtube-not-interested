@@ -1,10 +1,21 @@
 {
   "manifest_version": 3,
   "name": "YouTube Quick Not Interested",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "X to mark Not Interested. Auto-hides homepage videos already in your Watch Later.",
-  "permissions": ["storage", "unlimitedStorage", "alarms", "scripting", "tabs"],
-  "host_permissions": ["*://*.youtube.com/*", "http://localhost:7777/*", "http://localhost:7779/*", "http://sokol.falcon-parore.ts.net:8880/*"],
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "alarms",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "http://localhost:7777/*",
+    "http://localhost:7779/*",
+    "http://sokol.falcon-parore.ts.net:8880/*"
+  ],
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -28,9 +39,18 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.youtube.com/*"],
-      "js": ["lib/storage.js", "lib/bridge.js", "lib/markdown.js", "content.js"],
-      "css": ["styles.css"],
+      "matches": [
+        "*://*.youtube.com/*"
+      ],
+      "js": [
+        "lib/storage.js",
+        "lib/bridge.js",
+        "lib/markdown.js",
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
       "run_at": "document_idle"
     }
   ]
