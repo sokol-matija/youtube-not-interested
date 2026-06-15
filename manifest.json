@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Quick Not Interested",
-  "version": "1.1",
+  "version": "1.1.0",
   "description": "X to mark Not Interested. Auto-hides homepage videos already in your Watch Later.",
   "permissions": ["storage", "unlimitedStorage", "alarms", "scripting", "tabs"],
   "host_permissions": ["*://*.youtube.com/*", "http://localhost:7777/*", "http://localhost:7779/*", "http://sokol.falcon-parore.ts.net:8880/*"],

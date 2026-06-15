@@ -1,3 +1,4 @@
 logs/
 .DS_Store
 scripts/.venv/
+node_modules/
