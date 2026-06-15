@@ -1434,12 +1434,13 @@ body.quick-block-focus-mode ytd-browse[page-subtype="home"] #scroll-container {
 /* Watch stats pill (views · time ago) injected into #actions */
 #quick-block-watch-stats {
     display: inline-flex;
-    align-items: center;
+    align-items: flex-end;
+    align-self: flex-end;   /* sit at the bottom of the actions row, not centered */
     margin-left: 12px;
-    padding: 0 6px;
+    padding: 0 6px 4px;
     font-size: 1.3rem;
     font-weight: 600;
-    line-height: 36px;
+    line-height: 1.2;
     white-space: nowrap;
     color: var(--yt-spec-text-secondary, #606060);
 }
