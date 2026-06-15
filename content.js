@@ -1072,10 +1072,15 @@
         syncDescriptionToggle();
     }
 
-    // Playlist detection is URL-based (KISS): a real playlist watch URL always carries
-    // an `index=` param, e.g. ?v=…&list=…&index=1. DOM probing was unreliable.
+    // Playlist detection is URL-based (KISS). Two cases that show the side panel:
+    //   • Regular playlist — carries an `index=` param, e.g. ?v=…&list=…&index=1
+    //   • Mix / radio — `start_radio=1` and/or a `list=RD…` id (auto-mix ids all
+    //     start with "RD"; e.g. ?v=…&list=RDMqc37ItMefM&start_radio=1). No `index`.
+    // DOM probing was unreliable, so we stick to the URL.
     function isPlaylistUrl() {
-        return new URLSearchParams(location.search).has('index');
+        const p = new URLSearchParams(location.search);
+        if (p.has('index') || p.has('start_radio')) return true;
+        return (p.get('list') || '').startsWith('RD');
     }
 
     // Chapters is opt-in per video: the chapters button only appears after the user
