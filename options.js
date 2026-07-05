@@ -154,6 +154,7 @@ async function render() {
     $('#hideDescriptionToggle').checked  = !!settings.hideDescription;
     $('#hideTeaserCarouselToggle').checked = !!settings.hideTeaserCarousel;
     $('#autoSummarizeToggle').checked    = !!settings.autoSummarize;
+    $('#autoSummarizeSilentToggle').checked = !!settings.autoSummarizeSilent;
     $('#autoTtsToggle').checked          = !!settings.autoTts;
     $('#karaokeToggle').checked          = settings.karaokeEnabled !== false;
     $('#karaokeWordCountSelect').value   = String(settings.karaokeWordCount || 3);
@@ -228,6 +229,7 @@ $('#hideSearchOnWatchToggle').addEventListener('change', e => Storage.setSetting
 $('#hideDescriptionToggle').addEventListener('change', e => Storage.setSettings({ hideDescription: e.target.checked }));
 $('#hideTeaserCarouselToggle').addEventListener('change', e => Storage.setSettings({ hideTeaserCarousel: e.target.checked }));
 $('#autoSummarizeToggle').addEventListener('change', e => Storage.setSettings({ autoSummarize: e.target.checked }));
+$('#autoSummarizeSilentToggle').addEventListener('change', e => Storage.setSettings({ autoSummarizeSilent: e.target.checked }));
 $('#autoTtsToggle').addEventListener('change', e => Storage.setSettings({ autoTts: e.target.checked }));
 $('#karaokeToggle').addEventListener('change', e => Storage.setSettings({ karaokeEnabled: e.target.checked }));
 $('#karaokeWordCountSelect').addEventListener('change', e => Storage.setSettings({ karaokeWordCount: parseInt(e.target.value, 10) || 3 }));

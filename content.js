@@ -660,7 +660,13 @@
         if (summaryState.running) return;
         if (summaryState.summarized && summaryState.videoId === id) return;
         const settings = await Storage.getSettings();
-        if (!settings.autoSummarize) return;
+        // Two flavours: "+ read on open" reads aloud (auto-read blocks below);
+        // "silent" only generates + auto-opens the panel (no read).
+        if (!settings.autoSummarize && !settings.autoSummarizeSilent) return;
+        // Never regenerate a summary that's already cached. A spurious same-page
+        // yt-navigate-finish can wipe in-memory state and re-trigger this; the
+        // restore path repaints (and auto-opens) the cached summary instead.
+        try { if (await Storage.getSummary(id)) return; } catch {}
         // Make sure the drawer + FAB are mounted so runSummarize has DOM to
         // write status into. injectSummaryUI is idempotent.
         if (!getSummaryFab()) injectSummaryUI();
@@ -847,10 +853,11 @@
         syncTtsFabState();
         syncSummaryControls();
 
-        // When either auto-toggle is on, a cached entry should still trigger TTS —
-        // user opened the page expecting it to play.
+        // Auto behaviours apply to cached entries too — the user opened the page
+        // expecting them. Silent → open the panel; "+ read"/autoTts → read aloud.
         try {
             const s = await Storage.getSettings();
+            if (s.autoSummarizeSilent) openDrawer();
             if ((s.autoSummarize || s.autoTts) && autoReadTriggeredFor !== videoId) {
                 autoReadTriggeredFor = videoId;
                 const ok = await readSummary();
@@ -1438,6 +1445,12 @@
                 });
             } catch {}
 
+            const s = await Storage.getSettings();
+
+            // Silent auto-summarize: open the panel the moment it's ready, no
+            // click needed (it doesn't read aloud — that's the "+ read" toggle).
+            if (s.autoSummarizeSilent) openDrawer();
+
             // Toast + green badge only when drawer is closed
             if (!getSummaryDrawer()?.classList.contains('open')) {
                 const label = tr.title ? `Summary ready · ${tr.title}` : 'Summary ready';
@@ -1448,7 +1461,6 @@
             // Auto-read when either toggle is on — behaves exactly like clicking
             // "Read summary aloud": shows the generating state, then plays.
             try {
-                const s = await Storage.getSettings();
                 if ((s.autoSummarize || s.autoTts) && autoReadTriggeredFor !== videoId) {
                     autoReadTriggeredFor = videoId;
                     const ok = await readSummary();

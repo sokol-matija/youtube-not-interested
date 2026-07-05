@@ -139,6 +139,7 @@ async function render() {
     $('#hideThanksToggle').checked = !!settings.hideThanksButton;
     $('#hideSearchOnWatchToggle').checked = !!settings.hideSearchOnWatch;
     $('#autoSummarizeToggle').checked = !!settings.autoSummarize;
+    $('#autoSummarizeSilentToggle').checked = !!settings.autoSummarizeSilent;
     $('#karaokeToggle').checked = settings.karaokeEnabled !== false;
     $('#karaokeWordCountSelect').value = String(settings.karaokeWordCount || 3);
     $('#autoTtsToggle').checked = !!settings.autoTts;
@@ -213,6 +214,10 @@ $('#hideSearchOnWatchToggle').addEventListener('change', async (e) => {
 
 $('#autoSummarizeToggle').addEventListener('change', async (e) => {
     await Storage.setSettings({ autoSummarize: e.target.checked });
+});
+
+$('#autoSummarizeSilentToggle').addEventListener('change', async (e) => {
+    await Storage.setSettings({ autoSummarizeSilent: e.target.checked });
 });
 
 $('#karaokeToggle').addEventListener('change', async (e) => {
