@@ -148,6 +148,38 @@ body.quick-block-hide-teaser-carousel #teaser-carousel {
     display: none !important;
 }
 
+/* Watch counter — two circles (videos played, time watched today) next to the
+   hide-description toggle. Same chip language, like/dislike font (1.4rem/500). */
+#quick-block-watch-counter {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    position: relative;   /* sit above the subscribe button's ripple overlay */
+    z-index: 100;
+}
+.qb-watch-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 36px;
+    height: 36px;
+    padding: 0 8px;
+    border-radius: 18px;
+    font-family: "Roboto", "Arial", sans-serif;
+    font-size: 1.4rem;
+    font-weight: 500;
+    white-space: nowrap;
+    background: rgba(0, 0, 0, 0.05);
+    color: #0f0f0f;
+}
+html[dark] .qb-watch-pill,
+[dark] .qb-watch-pill {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f1f1f1;
+}
+
 /* Cinema toggle in the player bar — inner rect fills when active */
 #quick-block-cinema-btn { color: #fff; }
 #quick-block-cinema-btn svg { padding: 6px; box-sizing: border-box; }
@@ -1479,18 +1511,11 @@ body.quick-block-focus-mode ytd-browse[page-subtype="home"] #scroll-container {
 /* Watch stats pill (views · time ago) injected into #actions */
 #quick-block-watch-stats {
     display: inline-flex;
-    align-items: flex-end;
-    align-self: flex-end;   /* sit at the bottom of the actions row, not centered */
+    align-items: center;
+    align-self: center;
+    gap: 6px;
     margin-left: 12px;
-    padding: 0 6px 4px;
-    font-size: 1.3rem;
-    font-weight: 600;
-    line-height: 1.2;
-    white-space: nowrap;
-    color: var(--yt-spec-text-secondary, #606060);
-}
-@media (prefers-color-scheme: dark) {
-    #quick-block-watch-stats { color: var(--yt-spec-text-secondary, #aaa); }
+    margin-right: 12px;   /* keep the last pill off the like button */
 }
 
 /* Inline "hide description" toggle — icon-only circular button matching YouTube's

@@ -318,7 +318,62 @@
         if (changes[Storage.KEYS.SUMMARY_PROFILES]) {
             populateProfileSelect();
         }
+        // Watch counter — our own tick writes land here too, as do other tabs'.
+        if (changes[WATCH_STATS_KEY]) {
+            updateWatchCounter(changes[WATCH_STATS_KEY].newValue);
+        }
     });
+
+    // ── Masthead watch counter — videos played + time watched today ──────────
+    const WATCH_COUNTER_ID = 'quick-block-watch-counter';
+    const WATCH_STATS_KEY = 'watchStatsToday';   // { date, seconds, ids: [videoId] }
+    const WATCH_TICK_MS = 5000;
+
+    function fmtWatchTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        return m >= 60 ? `${Math.floor(m / 60)}h${m % 60}m` : `${m}m`;
+    }
+
+    function updateWatchCounter(stats) {
+        const el = document.getElementById(WATCH_COUNTER_ID);
+        if (!el) return;
+        const today = new Date().toISOString().slice(0, 10);
+        const fresh = stats && stats.date === today ? stats : { seconds: 0, ids: [] };
+        el.querySelector('[data-role="count"]').textContent = fresh.ids.length;
+        el.querySelector('[data-role="time"]').textContent = fmtWatchTime(fresh.seconds);
+    }
+
+    // Two circles next to the hide-description toggle: videos played + time
+    // watched today. Same 36px chip language as the description button.
+    function injectWatchCounter() {
+        if (document.getElementById(WATCH_COUNTER_ID)) return;
+        const descBtn = document.getElementById(DESC_TOGGLE_ID);
+        if (!descBtn) return;
+        const wrap = document.createElement('span');
+        wrap.id = WATCH_COUNTER_ID;
+        wrap.title = 'Videos played · time watched today';
+        wrap.innerHTML = `
+            <span class="qb-watch-pill" data-role="count"></span>
+            <span class="qb-watch-pill" data-role="time"></span>`;
+        descBtn.insertAdjacentElement('afterend', wrap);
+        chrome.storage.local.get(WATCH_STATS_KEY, (r) => updateWatchCounter(r?.[WATCH_STATS_KEY]));
+    }
+
+    // Accrue while a watch-page video is actually playing. Read-modify-write
+    // every tick; day rollover just starts a fresh record.
+    // ponytail: two tabs playing at once can drop a tick to a lost update —
+    // per-tab buckets if that ever matters.
+    setInterval(async () => {
+        const v = document.querySelector('#movie_player video');
+        const id = currentWatchVideoId();
+        if (!v || !id || v.paused || v.ended) return;
+        const today = new Date().toISOString().slice(0, 10);
+        const { [WATCH_STATS_KEY]: rec } = await chrome.storage.local.get(WATCH_STATS_KEY);
+        const stats = rec && rec.date === today ? rec : { date: today, seconds: 0, ids: [] };
+        stats.seconds += WATCH_TICK_MS / 1000;
+        if (!stats.ids.includes(id)) stats.ids.push(id);
+        await chrome.storage.local.set({ [WATCH_STATS_KEY]: stats });
+    }, WATCH_TICK_MS);
 
     // ── Watch-page automations ────────────────────────────────────────────────
     let lastWatchVideoId = null;
@@ -382,16 +437,23 @@
         if (!stats) return;
         const actions = document.querySelector('ytd-watch-metadata #actions');
         if (!actions) return;
-        const label = [stats.views, stats.timeAgo].filter(Boolean).join(' · ');
+        const parts = [stats.views, stats.timeAgo].filter(Boolean);
+        const label = parts.join(' · ');
+        const pills = parts.map(p => {
+            const s = document.createElement('span');
+            s.className = 'qb-watch-pill';
+            s.textContent = p;
+            return s;
+        });
         let el = document.getElementById(WATCH_STATS_ID);
         if (el) {
-            if (el.dataset.label !== label) { el.textContent = label; el.dataset.label = label; }
+            if (el.dataset.label !== label) { el.replaceChildren(...pills); el.dataset.label = label; }
             return;
         }
         el = document.createElement('div');
         el.id = WATCH_STATS_ID;
         el.className = 'quick-block-watch-stats';
-        el.textContent = label;
+        el.replaceChildren(...pills);
         el.dataset.label = label;
         actions.appendChild(el);
     }
@@ -2303,6 +2365,7 @@
     async function init() {
         await loadStateAndRescan();
         injectFocusFab();
+        injectWatchCounter();
         processVideos();
         setTimeout(processVideos, 500);
         setTimeout(processVideos, 1500);
@@ -2344,6 +2407,9 @@
             // Masthead focus toggle: re-inject only when missing (idempotent,
             // bails fast once mounted so it can't loop the observer).
             if (!getFocusFab()) injectFocusFab();
+            // Watch counter sits after the hide-description toggle, so it can
+            // only mount once that button exists (both self-heal here).
+            if (currentWatchVideoId() && !document.getElementById(WATCH_COUNTER_ID)) injectWatchCounter();
         });
         observer.observe(document.body, { childList: true, subtree: true });
 
