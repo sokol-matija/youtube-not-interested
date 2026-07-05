@@ -227,6 +227,48 @@
         document.body.classList.toggle('quick-block-on-watch', !!currentWatchVideoId());
     }
 
+    const CINEMA_BTN_ID = 'quick-block-cinema-btn';
+
+    function applyCinemaToggle(on) {
+        const changed = document.body.classList.contains('quick-block-cinema') !== !!on;
+        document.body.classList.toggle('quick-block-cinema', !!on);
+        // Player controls size from JS-measured player width — nudge a recalc.
+        if (changed) window.dispatchEvent(new Event('resize'));
+        const btn = document.getElementById(CINEMA_BTN_ID);
+        if (btn) {
+            btn.classList.toggle('qb-cinema-btn-active', !!on);
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+    }
+
+    // Player-bar cinema toggle — sits leftmost in .ytp-right-controls, next to
+    // the theater/fullscreen buttons. Idempotent: bails if already mounted.
+    function injectCinemaButton() {
+        if (document.getElementById(CINEMA_BTN_ID)) return;
+        const controls = document.querySelector('#movie_player .ytp-right-controls');
+        if (!controls) return;
+        const btn = document.createElement('button');
+        btn.id = CINEMA_BTN_ID;
+        btn.className = 'ytp-button';
+        btn.title = 'Cinema mode (video only)';
+        btn.setAttribute('aria-label', 'Cinema mode');
+        btn.setAttribute('aria-pressed', document.body.classList.contains('quick-block-cinema') ? 'true' : 'false');
+        btn.innerHTML = `
+            <svg height="100%" width="100%" viewBox="0 0 36 36">
+                <rect x="7" y="9" width="22" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                <rect class="qb-cinema-inner" x="11" y="13" width="14" height="10" rx="1" fill="currentColor"/>
+            </svg>`;
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const s = await Storage.getSettings();
+            // setSettings fires storage.onChanged, which runs applyCinemaToggle
+            // here and in every other YT tab — no direct class flip needed.
+            Storage.setSettings({ cinemaMode: !s.cinemaMode });
+        });
+        if (document.body.classList.contains('quick-block-cinema')) btn.classList.add('qb-cinema-btn-active');
+        controls.insertBefore(btn, controls.firstChild);
+    }
+
     // ── React to storage changes (popup toggles, click capture, etc.) ─────────
     chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') return;
@@ -246,6 +288,7 @@
             applySearchOnWatchToggle(newSettings.hideSearchOnWatch);
             applyDescriptionToggle(newSettings.hideDescription);
             applyTeaserCarouselToggle(newSettings.hideTeaserCarousel);
+            applyCinemaToggle(newSettings.cinemaMode);
 
             // Karaoke settings can change while audio is playing — apply live.
             karaokeEnabled = newSettings.karaokeEnabled !== false;
@@ -2241,6 +2284,7 @@
         applySearchOnWatchToggle(settings.hideSearchOnWatch);
         applyDescriptionToggle(settings.hideDescription);
         applyTeaserCarouselToggle(settings.hideTeaserCarousel);
+        applyCinemaToggle(settings.cinemaMode);
         resetPlaylistPanelState();   // no memory — derive from current URL
         applyPlaylistPanelMode();
         focusModeEnabled = !!settings.focusModeEnabled;
@@ -2278,6 +2322,9 @@
             // fast once set). The hide state itself is a body class, so CSS reapplies
             // it to the rebuilt description box with no extra work here.
             if (currentWatchVideoId() && !document.getElementById(DESC_TOGGLE_ID)) injectDescriptionToggle();
+            // Cinema toggle lives in the player bar, which mounts async and can
+            // rebuild — re-inject only when missing (idempotent, bails fast).
+            if (currentWatchVideoId() && !document.getElementById(CINEMA_BTN_ID)) injectCinemaButton();
             // Playlist panel mounts async after nav and is absent on non-playlist
             // pages. Reconcile every tick (not just when missing): the pill must
             // also disappear if the playlist panel is closed while it's mounted.

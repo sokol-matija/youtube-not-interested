@@ -148,6 +148,37 @@ body.quick-block-hide-teaser-carousel #teaser-carousel {
     display: none !important;
 }
 
+/* Cinema toggle in the player bar — inner rect fills when active */
+#quick-block-cinema-btn { color: #fff; }
+#quick-block-cinema-btn svg { padding: 6px; box-sizing: border-box; }
+#quick-block-cinema-btn .qb-cinema-inner { opacity: 0; transition: opacity 0.15s; }
+#quick-block-cinema-btn.qb-cinema-btn-active .qb-cinema-inner { opacity: 1; }
+
+/* Cinema mode — watch page shows only the video, pinned to the full viewport */
+body.quick-block-cinema.quick-block-on-watch #masthead-container,
+body.quick-block-cinema.quick-block-on-watch ytd-watch-flexy #secondary,
+body.quick-block-cinema.quick-block-on-watch ytd-watch-flexy #below {
+    display: none !important;
+}
+body.quick-block-cinema.quick-block-on-watch {
+    overflow: hidden !important;
+}
+body.quick-block-cinema.quick-block-on-watch #movie_player {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 6000 !important;
+    background: #000 !important;
+}
+body.quick-block-cinema.quick-block-on-watch #movie_player video {
+    width: 100vw !important;
+    height: 100vh !important;
+    left: 0 !important;
+    top: 0 !important;
+    object-fit: contain !important;
+}
+
 /* Hide search bar on /watch pages */
 body.quick-block-on-watch.quick-block-hide-search-watch ytd-masthead #center {
     display: none !important;

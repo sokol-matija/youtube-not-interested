@@ -151,6 +151,7 @@ async function render() {
     $('#hideShareToggle').checked        = !!settings.hideShareButton;
     $('#hideThanksToggle').checked       = !!settings.hideThanksButton;
     $('#hideSearchOnWatchToggle').checked = !!settings.hideSearchOnWatch;
+    $('#cinemaModeToggle').checked       = !!settings.cinemaMode;
     $('#hideDescriptionToggle').checked  = !!settings.hideDescription;
     $('#hideTeaserCarouselToggle').checked = !!settings.hideTeaserCarousel;
     $('#autoSummarizeToggle').checked    = !!settings.autoSummarize;
@@ -226,6 +227,7 @@ $('#hideBottomCommentsToggle').addEventListener('change', e => Storage.setSettin
 $('#hideShareToggle').addEventListener('change', e => Storage.setSettings({ hideShareButton: e.target.checked }));
 $('#hideThanksToggle').addEventListener('change', e => Storage.setSettings({ hideThanksButton: e.target.checked }));
 $('#hideSearchOnWatchToggle').addEventListener('change', e => Storage.setSettings({ hideSearchOnWatch: e.target.checked }));
+$('#cinemaModeToggle').addEventListener('change', e => Storage.setSettings({ cinemaMode: e.target.checked }));
 $('#hideDescriptionToggle').addEventListener('change', e => Storage.setSettings({ hideDescription: e.target.checked }));
 $('#hideTeaserCarouselToggle').addEventListener('change', e => Storage.setSettings({ hideTeaserCarousel: e.target.checked }));
 $('#autoSummarizeToggle').addEventListener('change', e => Storage.setSettings({ autoSummarize: e.target.checked }));

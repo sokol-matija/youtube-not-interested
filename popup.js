@@ -138,6 +138,7 @@ async function render() {
     $('#hideShareToggle').checked = !!settings.hideShareButton;
     $('#hideThanksToggle').checked = !!settings.hideThanksButton;
     $('#hideSearchOnWatchToggle').checked = !!settings.hideSearchOnWatch;
+    $('#cinemaModeToggle').checked = !!settings.cinemaMode;
     $('#autoSummarizeToggle').checked = !!settings.autoSummarize;
     $('#autoSummarizeSilentToggle').checked = !!settings.autoSummarizeSilent;
     $('#karaokeToggle').checked = settings.karaokeEnabled !== false;
@@ -210,6 +211,10 @@ $('#hideThanksToggle').addEventListener('change', async (e) => {
 
 $('#hideSearchOnWatchToggle').addEventListener('change', async (e) => {
     await Storage.setSettings({ hideSearchOnWatch: e.target.checked });
+});
+
+$('#cinemaModeToggle').addEventListener('change', async (e) => {
+    await Storage.setSettings({ cinemaMode: e.target.checked });
 });
 
 $('#autoSummarizeToggle').addEventListener('change', async (e) => {
