@@ -15,11 +15,17 @@ const DEFAULT_MODEL = process.env.CLAUDE_MODEL || 'haiku';
 // Setup: python3 -m venv scripts/.venv && scripts/.venv/bin/pip install youtube-transcript-api
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+const CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(process.env.HOME || '', '.claude');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VENV_PY = process.platform === 'win32'
     ? path.join(__dirname, '.venv', 'Scripts', 'python.exe')
     : path.join(__dirname, '.venv', 'bin', 'python');
 const YTT_PYTHON = process.env.YTT_PYTHON || VENV_PY;
+// Transcript proxy mode (see runYtt). Set WEBSHARE_PROXY_USERNAME/PASSWORD for
+// Webshare residential, or YTT_HTTP_PROXY/YTT_HTTPS_PROXY for a generic proxy.
+const PROXY_MODE = (process.env.WEBSHARE_PROXY_USERNAME && process.env.WEBSHARE_PROXY_PASSWORD)
+    ? 'webshare'
+    : (process.env.YTT_HTTP_PROXY || process.env.YTT_HTTPS_PROXY) ? 'generic' : 'none';
 // Hard cap to avoid runaway invocations
 const MAX_INPUT_CHARS = 200_000;
 
@@ -66,10 +72,25 @@ async function readBody(req) {
 function runYtt(videoId) {
     return new Promise((resolve) => {
         const script = `
-import sys, json
+import sys, json, os
 from youtube_transcript_api import YouTubeTranscriptApi
 try:
-    api = YouTubeTranscriptApi()
+    # Optional proxy to dodge YouTube IP bans. Webshare residential proxies are
+    # supported natively (rotating); a generic HTTP/HTTPS proxy also works.
+    #   Webshare:  WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD
+    #   Generic:   YTT_HTTP_PROXY / YTT_HTTPS_PROXY  (e.g. http://user:pass@host:port)
+    proxy_config = None
+    wu = os.environ.get('WEBSHARE_PROXY_USERNAME')
+    wp = os.environ.get('WEBSHARE_PROXY_PASSWORD')
+    hp = os.environ.get('YTT_HTTP_PROXY')
+    sp = os.environ.get('YTT_HTTPS_PROXY')
+    if wu and wp:
+        from youtube_transcript_api.proxies import WebshareProxyConfig
+        proxy_config = WebshareProxyConfig(proxy_username=wu, proxy_password=wp)
+    elif hp or sp:
+        from youtube_transcript_api.proxies import GenericProxyConfig
+        proxy_config = GenericProxyConfig(http_url=(hp or sp), https_url=(sp or hp))
+    api = YouTubeTranscriptApi(proxy_config=proxy_config) if proxy_config else YouTubeTranscriptApi()
     fetched = api.fetch(sys.argv[1])
     out = {
         'ok': True,
@@ -102,10 +123,82 @@ except Exception as e:
     });
 }
 
+// ── Transcript fetch throttle ────────────────────────────────────────────────
+// Opening many videos at once fires many transcript fetches; YouTube then
+// rate-blocks the IP (IpBlocked / RequestBlocked). Serialize fetches one at a
+// time, wait a randomized 2–5s gap between them (varied so the cadence isn't
+// robotic), dedupe concurrent requests for the same video, and back off for a
+// cooldown once a block is detected so we stop hammering YouTube.
+const TRANSCRIPT_MIN_GAP_MS = Number(process.env.YTT_MIN_GAP_MS) || 2000;
+const TRANSCRIPT_MAX_GAP_MS = Number(process.env.YTT_MAX_GAP_MS) || 5000;
+const TRANSCRIPT_COOLDOWN_MS = Number(process.env.YTT_COOLDOWN_MS) || 5 * 60 * 1000;
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+// Random delay in [min, max], clamped so a min>max env combo can't go negative.
+function nextGapMs() {
+    const span = Math.max(0, TRANSCRIPT_MAX_GAP_MS - TRANSCRIPT_MIN_GAP_MS);
+    return TRANSCRIPT_MIN_GAP_MS + Math.floor(Math.random() * (span + 1));
+}
+
+let ytQueue = Promise.resolve();   // serial chain: one Python process at a time
+let lastYttAt = 0;                  // timestamp of the last fetch (for min-gap)
+let blockedUntil = 0;              // epoch ms: skip fetching until this passes
+const ytInFlight = new Map();      // videoId → Promise (dedupe concurrent reqs)
+
+function isBlockResult(r) {
+    if (!r || r.ok) return false;
+    const s = `${r.reason || ''} ${r.message || ''}`.toLowerCase();
+    return s.includes('ipblocked') || s.includes('requestblocked')
+        || s.includes('blocking requests') || s.includes('too many requests');
+}
+
+// Run task on the serial queue (next item waits for the current one).
+function enqueue(task) {
+    const run = ytQueue.then(task, task);
+    ytQueue = run.then(() => {}, () => {});
+    return run;
+}
+
+function fetchTranscriptThrottled(videoId) {
+    const existing = ytInFlight.get(videoId);
+    if (existing) return existing;   // same video already queued/running
+
+    const p = enqueue(async () => {
+        // In cooldown → don't even spawn Python; tell the caller to slow down.
+        if (Date.now() < blockedUntil) {
+            const waitS = Math.ceil((blockedUntil - Date.now()) / 1000);
+            return {
+                ok: false,
+                reason: 'RateLimitCooldown',
+                message: `YouTube rate-limited this IP from too many requests. Cooling down ~${waitS}s — open videos more slowly.`,
+                cooldownMs: blockedUntil - Date.now(),
+            };
+        }
+        // Wait a randomized gap since the last fetch (skip if enough time passed).
+        const gap = nextGapMs();
+        const since = Date.now() - lastYttAt;
+        if (since < gap) await sleep(gap - since);
+
+        const result = await runYtt(videoId);
+        lastYttAt = Date.now();
+
+        if (isBlockResult(result)) {
+            blockedUntil = Date.now() + TRANSCRIPT_COOLDOWN_MS;
+            console.warn(`[${new Date().toISOString()}] YouTube IP block detected — pausing transcript fetches for ${TRANSCRIPT_COOLDOWN_MS / 1000}s`);
+        }
+        return result;
+    }).finally(() => ytInFlight.delete(videoId));
+
+    ytInFlight.set(videoId, p);
+    return p;
+}
+
 function runClaude(prompt, model) {
     return new Promise((resolve) => {
         const args = ['-p', '--model', model || DEFAULT_MODEL];
-        const proc = spawn(CLAUDE_BIN, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+        const proc = spawn(CLAUDE_BIN, args, {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: { ...process.env, CLAUDE_CONFIG_DIR },
+        });
         let out = '', err = '';
         let spawnErr = null;
         proc.on('error', e => {
@@ -152,6 +245,7 @@ const server = http.createServer(async (req, res) => {
             port: PORT,
             defaultModel: DEFAULT_MODEL,
             pythonPath: YTT_PYTHON,
+            proxy: PROXY_MODE,
         }));
     }
     if (req.method === 'POST' && req.url === '/transcript') {
@@ -163,7 +257,7 @@ const server = http.createServer(async (req, res) => {
                 return res.end(JSON.stringify({ ok: false, error: 'invalid videoId' }));
             }
             const t0 = Date.now();
-            const result = await runYtt(videoId);
+            const result = await fetchTranscriptThrottled(videoId);
             const ms = Date.now() - t0;
             console.log(`[${new Date().toISOString()}] /transcript ${videoId} → ${result.ok ? result.segments.length + ' segs' : result.reason} in ${ms}ms`);
             res.writeHead(200, { 'Content-Type': 'application/json', ...headers });
@@ -213,4 +307,8 @@ server.listen(PORT, '127.0.0.1', () => {
     console.log(`claude-bridge ready on http://localhost:${PORT}`);
     console.log(`POST /run         body: { "prompt": "...", "model": "haiku|sonnet|opus" }`);
     console.log(`POST /transcript  body: { "videoId": "..." }  python: ${YTT_PYTHON}`);
+    console.log(`transcript proxy: ${PROXY_MODE}  ·  throttle: serial, ${TRANSCRIPT_MIN_GAP_MS}-${TRANSCRIPT_MAX_GAP_MS}ms gap, ${TRANSCRIPT_COOLDOWN_MS / 1000}s cooldown on block`);
+    if (PROXY_MODE === 'none') {
+        console.log('  (no proxy — set WEBSHARE_PROXY_USERNAME/PASSWORD to avoid IP bans when bursting)');
+    }
 });

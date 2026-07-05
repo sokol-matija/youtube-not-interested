@@ -1307,6 +1307,31 @@
         drawer.setAttribute('aria-hidden', 'true');
     }
 
+    // Map a raw transcript-fetch failure to a short, human toast line. The full
+    // raw message (e.g. the multi-line IpBlocked dump) still goes in the drawer.
+    function friendlyTranscriptError(reason, message) {
+        switch (reason) {
+            case 'IpBlocked':
+            case 'RequestBlocked':
+                return 'YouTube blocked this IP — switch network or set a proxy';
+            case 'RateLimitCooldown':
+                return message || 'Rate-limited — cooling down a moment';
+            case 'TranscriptsDisabled':
+                return 'Transcripts are disabled for this video';
+            case 'NoTranscriptFound':
+            case 'NoTranscriptAvailable':
+            case 'NotTranslatable':
+                return 'No transcript available for this video';
+            case 'VideoUnavailable':
+                return 'Video unavailable';
+            case 'python-spawn':
+            case 'python-exit':
+                return 'Transcript helper not running — check the bridge';
+            default:
+                return `Transcript failed: ${reason || 'unknown'}`;
+        }
+    }
+
     async function runSummarize() {
         if (summaryState.running) return;
         summaryState.running = true;
@@ -1357,6 +1382,10 @@
                 };
             } else {
                 if (body) body.textContent = `Transcript fetch failed: ${data.reason || 'unknown'}\n${data.message || ''}`;
+                // Surface a SHORT line on-page so failures aren't silent (esp.
+                // with the drawer closed during auto-summarize). The full raw
+                // message stays in the drawer body above for detail.
+                showSummaryToast(friendlyTranscriptError(data.reason, data.message), { error: true });
                 summaryState.statusText = '';
                 if (status) status.textContent = '';
                 summaryState.running = false;
@@ -1366,6 +1395,7 @@
             }
         } catch (e) {
             if (body) body.textContent = `Bridge unreachable. Start it:\n  node scripts/claude-bridge.mjs\n\n${e.message}`;
+            showSummaryToast('Summary bridge offline — start claude-bridge', { error: true });
             summaryState.statusText = '';
             if (status) status.textContent = '';
             summaryState.running = false;
@@ -1471,6 +1501,7 @@
             const liveBody = getSummaryDrawer()?.querySelector('.qb-sum-body');
             const liveStatus = getSummaryDrawer()?.querySelector('.qb-sum-status');
             if (liveBody) liveBody.textContent = `Summary failed: ${e.message}\n\nIf the bridge isn't running, start it:\n  node scripts/claude-bridge.mjs`;
+            showSummaryToast(`Summary failed: ${e.message}`, { error: true });
             summaryState.statusText = '';
             if (liveStatus) liveStatus.textContent = '';
         } finally {
@@ -2111,11 +2142,11 @@
         } catch {}
     }
 
-    function showSummaryToast(label) {
+    function showSummaryToast(label, opts = {}) {
         dismissSummaryToast();
         const toast = document.createElement('div');
         toast.id = SUMMARY_TOAST_ID;
-        toast.className = 'qb-sum-toast';
+        toast.className = 'qb-sum-toast' + (opts.error ? ' qb-sum-toast-error' : '');
         toast.setAttribute('role', 'button');
         toast.tabIndex = 0;
         toast.innerHTML = `<span class="qb-sum-toast-dot"></span><span class="qb-sum-toast-text"></span><span class="qb-beam-bloom" aria-hidden="true"></span>`;
@@ -2127,7 +2158,8 @@
         });
         document.body.appendChild(toast);
         requestAnimationFrame(() => toast.classList.add('show'));
-        summaryState.toastTimer = setTimeout(dismissSummaryToast, 6000);
+        // Errors linger a little longer so they're readable.
+        summaryState.toastTimer = setTimeout(dismissSummaryToast, opts.error ? 9000 : 6000);
     }
 
     function dismissSummaryToast() {

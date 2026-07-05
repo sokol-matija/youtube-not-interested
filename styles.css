@@ -463,6 +463,20 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
     max-width: 60vw;
 }
 
+/* Error variant — red dot + tint. Used for transcript/bridge/cooldown failures
+   so they surface on the page instead of only in the Diagnostics panel. */
+.qb-sum-toast-error .qb-sum-toast-dot {
+    background: #ff5252;
+    box-shadow: 0 0 6px rgba(255, 82, 82, 0.7);
+}
+#quick-block-summary-toast.qb-sum-toast-error {
+    border-color: rgba(255, 82, 82, 0.45);
+}
+.qb-sum-toast-error .qb-sum-toast-text {
+    white-space: normal;
+    max-width: 72vw;
+}
+
 /* ───────────────────────────────────────────────────────────────────────────
    Border-beam (ocean) — hand-port of Jakubantalik/border-beam generated CSS.
    The lib's <BorderBeam> just emits this CSS string; no JS driver. Colours are
