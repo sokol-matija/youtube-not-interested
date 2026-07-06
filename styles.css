@@ -148,6 +148,16 @@ body.quick-block-hide-teaser-carousel #teaser-carousel {
     display: none !important;
 }
 
+/* Hide mini guide (collapsed left sidebar) */
+body.quick-block-hide-mini-guide ytd-mini-guide-renderer {
+    display: none !important;
+}
+
+/* Reclaim the space the mini guide reserved (ytd-app keeps mini-guide-visible) */
+body.quick-block-hide-mini-guide ytd-page-manager {
+    margin-left: 0 !important;
+}
+
 /* Watch counter — two circles (videos played, time watched today) next to the
    hide-description toggle. Same chip language, like/dislike font (1.4rem/500). */
 #quick-block-watch-counter {

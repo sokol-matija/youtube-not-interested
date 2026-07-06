@@ -215,6 +215,10 @@
         document.body.classList.toggle('quick-block-hide-teaser-carousel', !!on);
     }
 
+    function applyMiniGuideToggle(on) {
+        document.body.classList.toggle('quick-block-hide-mini-guide', !!on);
+    }
+
     function applyThanksToggle(on) {
         document.body.classList.toggle('quick-block-hide-thanks', !!on);
     }
@@ -288,6 +292,7 @@
             applySearchOnWatchToggle(newSettings.hideSearchOnWatch);
             applyDescriptionToggle(newSettings.hideDescription);
             applyTeaserCarouselToggle(newSettings.hideTeaserCarousel);
+            applyMiniGuideToggle(newSettings.hideMiniGuide);
             applyCinemaToggle(newSettings.cinemaMode);
 
             // Karaoke settings can change while audio is playing — apply live.
@@ -2346,6 +2351,7 @@
         applySearchOnWatchToggle(settings.hideSearchOnWatch);
         applyDescriptionToggle(settings.hideDescription);
         applyTeaserCarouselToggle(settings.hideTeaserCarousel);
+        applyMiniGuideToggle(settings.hideMiniGuide);
         applyCinemaToggle(settings.cinemaMode);
         resetPlaylistPanelState();   // no memory — derive from current URL
         applyPlaylistPanelMode();

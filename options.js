@@ -154,6 +154,7 @@ async function render() {
     $('#cinemaModeToggle').checked       = !!settings.cinemaMode;
     $('#hideDescriptionToggle').checked  = !!settings.hideDescription;
     $('#hideTeaserCarouselToggle').checked = !!settings.hideTeaserCarousel;
+    $('#hideMiniGuideToggle').checked    = !!settings.hideMiniGuide;
     $('#autoSummarizeToggle').checked    = !!settings.autoSummarize;
     $('#autoSummarizeSilentToggle').checked = !!settings.autoSummarizeSilent;
     $('#autoTtsToggle').checked          = !!settings.autoTts;
@@ -230,6 +231,7 @@ $('#hideSearchOnWatchToggle').addEventListener('change', e => Storage.setSetting
 $('#cinemaModeToggle').addEventListener('change', e => Storage.setSettings({ cinemaMode: e.target.checked }));
 $('#hideDescriptionToggle').addEventListener('change', e => Storage.setSettings({ hideDescription: e.target.checked }));
 $('#hideTeaserCarouselToggle').addEventListener('change', e => Storage.setSettings({ hideTeaserCarousel: e.target.checked }));
+$('#hideMiniGuideToggle').addEventListener('change', e => Storage.setSettings({ hideMiniGuide: e.target.checked }));
 $('#autoSummarizeToggle').addEventListener('change', e => Storage.setSettings({ autoSummarize: e.target.checked }));
 $('#autoSummarizeSilentToggle').addEventListener('change', e => Storage.setSettings({ autoSummarizeSilent: e.target.checked }));
 $('#autoTtsToggle').addEventListener('change', e => Storage.setSettings({ autoTts: e.target.checked }));
