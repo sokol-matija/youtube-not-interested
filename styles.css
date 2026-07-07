@@ -196,6 +196,19 @@ html[dark] .qb-watch-pill,
 #quick-block-cinema-btn .qb-cinema-inner { opacity: 0; transition: opacity 0.15s; }
 #quick-block-cinema-btn.qb-cinema-btn-active .qb-cinema-inner { opacity: 1; }
 
+/* Auto-hide masthead: slide the top bar up on scroll-down (home feed only) */
+#masthead-container.ytd-app,
+#frosted-glass.ytd-app,
+ytd-feed-filter-chip-bar-renderer {
+    transition: transform 0.25s ease;
+    will-change: transform;
+}
+body.quick-block-masthead-hidden #masthead-container.ytd-app,
+body.quick-block-masthead-hidden #frosted-glass.ytd-app,
+body.quick-block-masthead-hidden ytd-feed-filter-chip-bar-renderer {
+    transform: translateY(-100%);
+}
+
 /* Cinema mode — watch page shows only the video, pinned to the full viewport */
 body.quick-block-cinema.quick-block-on-watch #masthead-container,
 body.quick-block-cinema.quick-block-on-watch ytd-watch-flexy #secondary,

@@ -155,6 +155,7 @@ async function render() {
     $('#hideDescriptionToggle').checked  = !!settings.hideDescription;
     $('#hideTeaserCarouselToggle').checked = !!settings.hideTeaserCarousel;
     $('#hideMiniGuideToggle').checked    = !!settings.hideMiniGuide;
+    $('#autoHideMastheadToggle').checked = !!settings.autoHideMasthead;
     $('#autoSummarizeToggle').checked    = !!settings.autoSummarize;
     $('#autoSummarizeSilentToggle').checked = !!settings.autoSummarizeSilent;
     $('#autoTtsToggle').checked          = !!settings.autoTts;
@@ -232,6 +233,7 @@ $('#cinemaModeToggle').addEventListener('change', e => Storage.setSettings({ cin
 $('#hideDescriptionToggle').addEventListener('change', e => Storage.setSettings({ hideDescription: e.target.checked }));
 $('#hideTeaserCarouselToggle').addEventListener('change', e => Storage.setSettings({ hideTeaserCarousel: e.target.checked }));
 $('#hideMiniGuideToggle').addEventListener('change', e => Storage.setSettings({ hideMiniGuide: e.target.checked }));
+$('#autoHideMastheadToggle').addEventListener('change', e => Storage.setSettings({ autoHideMasthead: e.target.checked }));
 $('#autoSummarizeToggle').addEventListener('change', e => Storage.setSettings({ autoSummarize: e.target.checked }));
 $('#autoSummarizeSilentToggle').addEventListener('change', e => Storage.setSettings({ autoSummarizeSilent: e.target.checked }));
 $('#autoTtsToggle').addEventListener('change', e => Storage.setSettings({ autoTts: e.target.checked }));

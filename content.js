@@ -219,6 +219,12 @@
         document.body.classList.toggle('quick-block-hide-mini-guide', !!on);
     }
 
+    let autoHideMasthead = false;
+    function applyAutoHideMastheadToggle(on) {
+        autoHideMasthead = !!on;
+        if (!autoHideMasthead) document.body.classList.remove('quick-block-masthead-hidden');
+    }
+
     function applyThanksToggle(on) {
         document.body.classList.toggle('quick-block-hide-thanks', !!on);
     }
@@ -293,6 +299,7 @@
             applyDescriptionToggle(newSettings.hideDescription);
             applyTeaserCarouselToggle(newSettings.hideTeaserCarousel);
             applyMiniGuideToggle(newSettings.hideMiniGuide);
+            applyAutoHideMastheadToggle(newSettings.autoHideMasthead);
             applyCinemaToggle(newSettings.cinemaMode);
 
             // Karaoke settings can change while audio is playing — apply live.
@@ -2352,6 +2359,7 @@
         applyDescriptionToggle(settings.hideDescription);
         applyTeaserCarouselToggle(settings.hideTeaserCarousel);
         applyMiniGuideToggle(settings.hideMiniGuide);
+        applyAutoHideMastheadToggle(settings.autoHideMasthead);
         applyCinemaToggle(settings.cinemaMode);
         resetPlaylistPanelState();   // no memory — derive from current URL
         applyPlaylistPanelMode();
@@ -2368,8 +2376,37 @@
         rescanAll();
     }
 
+    // ── Auto-hide masthead on scroll (home feed only) ───────────────────────────
+    // Slide the top bar up when scrolling down, back on scroll up. Home only —
+    // watch/search pages keep the header put. rAF-throttled read of scrollY.
+    function setupMastheadAutoHide() {
+        let lastY = window.scrollY;
+        let ticking = false;
+        const REVEAL_AT_TOP = 80;   // always show near the top
+
+        function onScroll() {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(() => {
+                ticking = false;
+                const onHome = autoHideMasthead && location.pathname === '/';
+                if (!onHome) {
+                    document.body.classList.remove('quick-block-masthead-hidden');
+                    lastY = window.scrollY;
+                    return;
+                }
+                const y = window.scrollY;
+                const hide = y > REVEAL_AT_TOP && y > lastY;
+                document.body.classList.toggle('quick-block-masthead-hidden', hide);
+                lastY = y;
+            });
+        }
+        window.addEventListener('scroll', onScroll, { passive: true });
+    }
+
     async function init() {
         await loadStateAndRescan();
+        setupMastheadAutoHide();
         injectFocusFab();
         injectWatchCounter();
         processVideos();
