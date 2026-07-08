@@ -85,7 +85,9 @@
         for (const title of titles) {
             if (title.textContent.trim() === 'Not interested') {
                 const item = title.closest('yt-list-item-view-model, [role="menuitem"]') || title;
+                const id = getVideoId(videoElement);
                 item.click();
+                if (id) hideVideo(videoElement, id);
                 setTimeout(() => document.body.classList.remove('quick-block-suppress-menu'), 100);
                 return;
             }
