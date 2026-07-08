@@ -201,7 +201,6 @@ html[dark] .qb-watch-pill,
 #frosted-glass.ytd-app,
 ytd-feed-filter-chip-bar-renderer {
     transition: transform 0.25s ease;
-    will-change: transform;
 }
 body.quick-block-masthead-hidden #masthead-container.ytd-app,
 body.quick-block-masthead-hidden #frosted-glass.ytd-app,
