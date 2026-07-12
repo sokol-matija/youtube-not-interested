@@ -40,11 +40,23 @@ chrome.windows.onFocusChanged.addListener(async winId => {
     try {
         if (winId === chrome.windows.WINDOW_ID_NONE) {
             const settings = await self.QuickBlockStorage.getSettings();
-            if (settings.autoPip === false) return;
+            if (settings.autoPip === false) {
+                console.log('[autopip] skip: toggle off');
+                return;
+            }
             const win = await chrome.windows.getLastFocused({ populate: true });
+            const tab = win?.tabs?.find(t => t.active);
+            console.log('[autopip] focus lost', {
+                winState: win?.state,
+                url: tab?.url,
+                audible: tab?.audible,
+            });
             if (!win || win.state === 'minimized') return;
-            const tab = win.tabs?.find(t => t.active);
-            if (!tab?.audible || !/youtube\.com\/watch/.test(tab.url || '')) return;
+            if (!tab?.audible || !/youtube\.com\/watch/.test(tab.url || '')) {
+                console.log('[autopip] skip: guard failed');
+                return;
+            }
+            console.log('[autopip] minimizing window', win.id);
             await chrome.windows.update(win.id, { state: 'minimized' });
             await chrome.storage.session.set({ [PIP_MIN_KEY]: win.id });
         } else {
@@ -55,7 +67,7 @@ chrome.windows.onFocusChanged.addListener(async winId => {
                 chrome.windows.update(id, { state: 'normal' }).catch(() => {});
             }
         }
-    } catch { /* window closed mid-race — ignore */ }
+    } catch (e) { console.warn('[autopip] error', e); }
 });
 
 // Global shortcut (works while another app is focused): toggle PiP on the
