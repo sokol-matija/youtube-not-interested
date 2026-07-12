@@ -28,6 +28,36 @@ chrome.alarms.onAlarm.addListener(a => {
     if (a.name === SYNC_ALARM) triggerSync();
 });
 
+// App-switch auto-PiP: Chrome only auto-enters PiP when the page goes
+// hidden, and alt-tabbing to another app leaves the tab visible. So when
+// Chrome loses focus while its active tab is playing YouTube, minimize that
+// window — the page goes hidden, Chrome fires auto-PiP, and the PiP overlay
+// floats above whatever app you switched to. Coming back (PiP's "back to
+// tab" button, or focusing any Chrome window) restores the window.
+const PIP_MIN_KEY = 'autoPipMinimizedWin';
+
+chrome.windows.onFocusChanged.addListener(async winId => {
+    try {
+        if (winId === chrome.windows.WINDOW_ID_NONE) {
+            const settings = await self.QuickBlockStorage.getSettings();
+            if (settings.autoPip === false) return;
+            const win = await chrome.windows.getLastFocused({ populate: true });
+            if (!win || win.state === 'minimized') return;
+            const tab = win.tabs?.find(t => t.active);
+            if (!tab?.audible || !/youtube\.com\/watch/.test(tab.url || '')) return;
+            await chrome.windows.update(win.id, { state: 'minimized' });
+            await chrome.storage.session.set({ [PIP_MIN_KEY]: win.id });
+        } else {
+            const { [PIP_MIN_KEY]: id } = await chrome.storage.session.get(PIP_MIN_KEY);
+            if (!id) return;
+            await chrome.storage.session.remove(PIP_MIN_KEY);
+            if (id !== winId) {
+                chrome.windows.update(id, { state: 'normal' }).catch(() => {});
+            }
+        }
+    } catch { /* window closed mid-race — ignore */ }
+});
+
 // Global shortcut (works while another app is focused): toggle PiP on the
 // playing YouTube tab. The command counts as a user gesture, which
 // executeScript carries into the page — requestPictureInPicture is allowed.
