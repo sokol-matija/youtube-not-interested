@@ -1,3 +1,16 @@
+# [1.3.0](https://github.com/sokol-matija/youtube-not-interested/compare/v1.2.0...v1.3.0) (2026-07-12)
+
+
+### Features
+
+* **home:** hide card after Not interested to remove YouTube placeholder ([93824b1](https://github.com/sokol-matija/youtube-not-interested/commit/93824b103e6d53928a40da2b1c74046924be5121))
+* **pip:** add manual toggle and auto picture-in-picture support ([fc1b291](https://github.com/sokol-matija/youtube-not-interested/commit/fc1b291f2e3d8b9a4d44ce7f86adac3989efbf0b))
+
+
+### Performance Improvements
+
+* **home:** drop redundant will-change on watch pills ([4b5f5be](https://github.com/sokol-matija/youtube-not-interested/commit/4b5f5be13d78447f0052ce6776f5f2ab5675c61e))
+
 # [1.2.0](https://github.com/sokol-matija/youtube-not-interested/compare/v1.1.1...v1.2.0) (2026-07-07)
 
 
