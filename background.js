@@ -28,44 +28,42 @@ chrome.alarms.onAlarm.addListener(a => {
     if (a.name === SYNC_ALARM) triggerSync();
 });
 
-// App-switch auto-PiP: Chrome only auto-enters PiP when the page goes
-// hidden, and alt-tabbing to another app leaves the tab visible. So when
-// Chrome loses focus while its active tab is playing YouTube, minimize that
-// window — the page goes hidden, Chrome fires auto-PiP, and the PiP overlay
-// floats above whatever app you switched to. Coming back (PiP's "back to
-// tab" button, or focusing any Chrome window) restores the window.
-const PIP_MIN_KEY = 'autoPipMinimizedWin';
+// App-switch auto-PiP: the browser only auto-enters PiP when the video tab
+// goes hidden, and alt-tabbing to another app leaves it visible (minimizing
+// doesn't fire it either, at least on Vivaldi/macOS). So when the browser
+// loses focus while the active tab is playing YouTube, park a blank tab on
+// top of it — the video tab goes hidden, auto-PiP fires, and the overlay
+// floats above whatever app you switched to. Refocusing the browser (or
+// PiP's "back to tab" button) restores the video tab and drops the parking
+// tab, which auto-closes the PiP window.
+const PIP_PARK_KEY = 'autoPipParkedTab';
 
 chrome.windows.onFocusChanged.addListener(async winId => {
     try {
         if (winId === chrome.windows.WINDOW_ID_NONE) {
             const settings = await self.QuickBlockStorage.getSettings();
-            if (settings.autoPip === false) {
-                console.log('[autopip] skip: toggle off');
-                return;
-            }
+            if (settings.autoPip === false) return;
+            const { [PIP_PARK_KEY]: parked } = await chrome.storage.session.get(PIP_PARK_KEY);
+            if (parked) return;
             const win = await chrome.windows.getLastFocused({ populate: true });
-            const tab = win?.tabs?.find(t => t.active);
-            console.log('[autopip] focus lost', {
-                winState: win?.state,
-                url: tab?.url,
-                audible: tab?.audible,
-            });
             if (!win || win.state === 'minimized') return;
-            if (!tab?.audible || !/youtube\.com\/watch/.test(tab.url || '')) {
-                console.log('[autopip] skip: guard failed');
-                return;
-            }
-            console.log('[autopip] minimizing window', win.id);
-            await chrome.windows.update(win.id, { state: 'minimized' });
-            await chrome.storage.session.set({ [PIP_MIN_KEY]: win.id });
+            const tab = win.tabs?.find(t => t.active);
+            if (!tab?.audible || !/youtube\.com\/watch/.test(tab.url || '')) return;
+            const temp = await chrome.tabs.create({
+                windowId: win.id,
+                url: 'about:blank',
+                active: true,
+            });
+            await chrome.storage.session.set({
+                [PIP_PARK_KEY]: { tempId: temp.id, videoId: tab.id },
+            });
+            console.log('[autopip] parked video tab', tab.id);
         } else {
-            const { [PIP_MIN_KEY]: id } = await chrome.storage.session.get(PIP_MIN_KEY);
-            if (!id) return;
-            await chrome.storage.session.remove(PIP_MIN_KEY);
-            if (id !== winId) {
-                chrome.windows.update(id, { state: 'normal' }).catch(() => {});
-            }
+            const { [PIP_PARK_KEY]: parked } = await chrome.storage.session.get(PIP_PARK_KEY);
+            if (!parked) return;
+            await chrome.storage.session.remove(PIP_PARK_KEY);
+            await chrome.tabs.update(parked.videoId, { active: true }).catch(() => {});
+            chrome.tabs.remove(parked.tempId).catch(() => {});
         }
     } catch (e) { console.warn('[autopip] error', e); }
 });
