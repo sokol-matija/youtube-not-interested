@@ -221,11 +221,29 @@
         document.body.classList.toggle('quick-block-hide-mini-guide', !!on);
     }
 
-    // Auto-PiP runs in the MAIN world (lib/autopip.js), which can't read
-    // chrome.storage — bridge the setting through a DOM attribute.
-    function applyAutoPipToggle(on) {
-        document.documentElement.dataset.qbAutoPipOff = on ? '' : '1';
-    }
+    // Picture-in-picture: "p" toggles PiP on the video (keypress = user
+    // gesture, so requestPictureInPicture is allowed). Coming back to the
+    // tab exits PiP automatically.
+    document.addEventListener('keydown', e => {
+        if (e.key !== 'p' && e.key !== 'P') return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        const t = e.target;
+        if (t.closest?.('input, textarea, select, [contenteditable]')) return;
+        const v = document.querySelector('video.html5-main-video')
+            || document.querySelector('video');
+        if (!v) return;
+        if (document.pictureInPictureElement) {
+            document.exitPictureInPicture().catch(() => {});
+        } else {
+            v.requestPictureInPicture().catch(() => {});
+        }
+    });
+
+    window.addEventListener('focus', () => {
+        if (document.pictureInPictureElement) {
+            document.exitPictureInPicture().catch(() => {});
+        }
+    });
 
     let autoHideMasthead = false;
     function applyAutoHideMastheadToggle(on) {
@@ -308,7 +326,6 @@
             applyTeaserCarouselToggle(newSettings.hideTeaserCarousel);
             applyMiniGuideToggle(newSettings.hideMiniGuide);
             applyAutoHideMastheadToggle(newSettings.autoHideMasthead);
-            applyAutoPipToggle(newSettings.autoPip !== false);
             applyCinemaToggle(newSettings.cinemaMode);
 
             // Karaoke settings can change while audio is playing — apply live.
@@ -2369,7 +2386,6 @@
         applyTeaserCarouselToggle(settings.hideTeaserCarousel);
         applyMiniGuideToggle(settings.hideMiniGuide);
         applyAutoHideMastheadToggle(settings.autoHideMasthead);
-        applyAutoPipToggle(settings.autoPip !== false);
         applyCinemaToggle(settings.cinemaMode);
         resetPlaylistPanelState();   // no memory — derive from current URL
         applyPlaylistPanelMode();
