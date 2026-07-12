@@ -221,6 +221,12 @@
         document.body.classList.toggle('quick-block-hide-mini-guide', !!on);
     }
 
+    // Auto-PiP runs in the MAIN world (lib/autopip.js), which can't read
+    // chrome.storage — bridge the setting through a DOM attribute.
+    function applyAutoPipToggle(on) {
+        document.documentElement.dataset.qbAutoPipOff = on ? '' : '1';
+    }
+
     let autoHideMasthead = false;
     function applyAutoHideMastheadToggle(on) {
         autoHideMasthead = !!on;
@@ -302,6 +308,7 @@
             applyTeaserCarouselToggle(newSettings.hideTeaserCarousel);
             applyMiniGuideToggle(newSettings.hideMiniGuide);
             applyAutoHideMastheadToggle(newSettings.autoHideMasthead);
+            applyAutoPipToggle(newSettings.autoPip !== false);
             applyCinemaToggle(newSettings.cinemaMode);
 
             // Karaoke settings can change while audio is playing — apply live.
@@ -2362,6 +2369,7 @@
         applyTeaserCarouselToggle(settings.hideTeaserCarousel);
         applyMiniGuideToggle(settings.hideMiniGuide);
         applyAutoHideMastheadToggle(settings.autoHideMasthead);
+        applyAutoPipToggle(settings.autoPip !== false);
         applyCinemaToggle(settings.cinemaMode);
         resetPlaylistPanelState();   // no memory — derive from current URL
         applyPlaylistPanelMode();
