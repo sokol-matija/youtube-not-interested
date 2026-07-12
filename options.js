@@ -146,7 +146,6 @@ async function render() {
 
     $('#hideToggle').checked             = settings.hideEnabled !== false;
     $('#autoFsToggle').checked           = !!settings.autoFullscreen;
-    $('#autoPipToggle').checked          = settings.autoPip !== false;
     $('#autoCommentsToggle').checked     = !!settings.autoOpenComments;
     $('#hideBottomCommentsToggle').checked = !!settings.hideBottomComments;
     $('#hideShareToggle').checked        = !!settings.hideShareButton;
@@ -225,7 +224,6 @@ async function undoOne(id) {
 
 $('#hideToggle').addEventListener('change', e => Storage.setSettings({ hideEnabled: e.target.checked }));
 $('#autoFsToggle').addEventListener('change', e => Storage.setSettings({ autoFullscreen: e.target.checked }));
-$('#autoPipToggle').addEventListener('change', e => Storage.setSettings({ autoPip: e.target.checked }));
 $('#autoCommentsToggle').addEventListener('change', e => Storage.setSettings({ autoOpenComments: e.target.checked }));
 $('#hideBottomCommentsToggle').addEventListener('change', e => Storage.setSettings({ hideBottomComments: e.target.checked }));
 $('#hideShareToggle').addEventListener('change', e => Storage.setSettings({ hideShareButton: e.target.checked }));
