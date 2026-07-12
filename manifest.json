@@ -52,6 +52,26 @@
         "styles.css"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.youtube.com/*"
+      ],
+      "js": [
+        "lib/autopip.js"
+      ],
+      "run_at": "document_idle",
+      "world": "MAIN"
     }
-  ]
+  ],
+  "commands": {
+    "toggle-pip": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+9",
+        "mac": "Command+Shift+9"
+      },
+      "description": "Toggle picture-in-picture on the playing YouTube video",
+      "global": true
+    }
+  }
 }

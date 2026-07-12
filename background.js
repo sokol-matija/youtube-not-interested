@@ -28,6 +28,35 @@ chrome.alarms.onAlarm.addListener(a => {
     if (a.name === SYNC_ALARM) triggerSync();
 });
 
+// Global shortcut (works while another app is focused): toggle PiP on the
+// playing YouTube tab. The command counts as a user gesture, which
+// executeScript carries into the page — requestPictureInPicture is allowed.
+chrome.commands.onCommand.addListener(cmd => {
+    if (cmd === 'toggle-pip') togglePip();
+});
+
+async function togglePip() {
+    const tabs = await chrome.tabs.query({ url: '*://*.youtube.com/*' });
+    if (!tabs.length) return;
+    const tab = tabs.find(t => t.audible) || tabs.find(t => t.active) || tabs[0];
+    await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: 'MAIN',
+        func: () => {
+            const v = document.querySelector('video.html5-main-video')
+                || document.querySelector('video');
+            if (!v) return;
+            if (document.pictureInPictureElement) {
+                document.exitPictureInPicture().catch(() => {});
+            } else {
+                // Marked so autopip.js closes it when the tab regains focus.
+                v.dataset.qbPip = '1';
+                v.requestPictureInPicture().catch(() => {});
+            }
+        },
+    }).catch(() => {});
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'request-sync') {
         triggerSync().then(sendResponse);
