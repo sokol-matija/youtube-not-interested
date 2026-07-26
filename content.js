@@ -863,15 +863,30 @@
     // above the metadata, so that scrollIntoView drags the whole page down.
     // We only ever fire this right after landing on a watch page, so the top
     // is always the right place to be — just force it back there.
-    // ponytail: three fixed nudges instead of observing YT's scroll animation;
-    // YT re-scrolls once the panel finishes rendering, so one call isn't enough.
+    // On a cold reload YT re-scrolls whenever the panel re-renders, which can
+    // land seconds after the click — fixed nudges lose that race. Instead snap
+    // back on every scroll until the user scrolls themselves (or 4s passes).
+    const COMMENTS_SNAP_MS = 4000;
     function clickCommentsButtonWithoutJump(btn) {
         btn.click();
         btn.blur();   // don't leave keyboard focus parked on the toggle
-        const toTop = () => window.scrollTo(0, 0);
-        requestAnimationFrame(toTop);
-        setTimeout(toTop, 150);
-        setTimeout(toTop, 450);
+        const USER_EVENTS = ['wheel', 'touchstart', 'keydown', 'mousedown'];
+        const snap = () => {
+            // YT also parks focus inside the panel ("Add a comment…"), which the
+            // browser scrolls to on its own — drop that too.
+            const ae = document.activeElement;
+            if (ae?.closest?.('#comments')) ae.blur();
+            if (window.scrollY) window.scrollTo(0, 0);
+        };
+        const stop = () => {
+            clearTimeout(timer);
+            window.removeEventListener('scroll', snap);
+            USER_EVENTS.forEach(t => window.removeEventListener(t, stop, true));
+        };
+        window.addEventListener('scroll', snap);
+        USER_EVENTS.forEach(t => window.addEventListener(t, stop, true));
+        const timer = setTimeout(stop, COMMENTS_SNAP_MS);
+        snap();
     }
 
     async function reopenCommentsAfterFullscreenExit() {
