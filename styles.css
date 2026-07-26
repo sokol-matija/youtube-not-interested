@@ -1540,6 +1540,13 @@ body.quick-block-focus-mode ytd-browse[page-subtype="home"] #scroll-container {
     margin-right: 12px;   /* keep the last pill off the like button */
 }
 
+/* Narrow window: #actions wraps to its own row right above the comments
+   header with no gap. Without breathing room the wrapped pill visually
+   collides with the comments count line. */
+@media (max-width: 900px) {
+    #quick-block-watch-stats { margin-top: 6px; margin-bottom: 6px; }
+}
+
 /* Inline "hide description" toggle — icon-only circular button matching YouTube's
    chip buttons. Themed via YT's html[dark] attribute (in-app theme, not the OS). */
 .qb-sum-toggle {
