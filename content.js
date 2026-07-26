@@ -2483,6 +2483,9 @@
         setTimeout(processVideos, 1500);
 
         const observer = new MutationObserver(() => {
+            // Extension reloaded/updated → this script is orphaned. Every chrome.*
+            // call below throws "Extension context invalidated" forever. Stop.
+            if (!extensionAlive()) { observer.disconnect(); return; }
             processVideos();
             // Self-heal summary UI on SPA nav: yt-navigate-finish sometimes fires
             // before the masthead is ready, or doesn't fire at all on home→video
