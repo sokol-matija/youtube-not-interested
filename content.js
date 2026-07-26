@@ -843,7 +843,19 @@
         // check and now. Reserve sync before the click to close the race.
         if (commentsAutoOpenedFor === id) return;
         commentsAutoOpenedFor = id;
+        clickCommentsButtonWithoutJump(btn);
+    }
+
+    // YT's own click handler both steals focus onto the button and scrolls it
+    // into view. In narrow/half-screen widths YT switches to a single-column
+    // layout, so that scrollIntoView drags the whole page down. Pin scroll
+    // position across the click and blur the button right after so it doesn't
+    // keep keyboard focus.
+    function clickCommentsButtonWithoutJump(btn) {
+        const x = window.scrollX, y = window.scrollY;
         btn.click();
+        btn.blur();
+        requestAnimationFrame(() => window.scrollTo(x, y));
     }
 
     async function reopenCommentsAfterFullscreenExit() {
@@ -856,7 +868,7 @@
         await new Promise(r => setTimeout(r, 300));
         const commentsBtn = document.querySelector('button[aria-label="Comments"]');
         if (commentsBtn && commentsBtn.getAttribute('aria-pressed') === 'false') {
-            commentsBtn.click();
+            clickCommentsButtonWithoutJump(commentsBtn);
         }
     }
 
