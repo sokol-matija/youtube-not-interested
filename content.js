@@ -245,6 +245,18 @@
         }
     });
 
+    // "c" toggles cinema mode (same as the player-bar button below). Overrides
+    // YouTube's own "c" (subtitles) — subtitles still toggle from the player bar.
+    document.addEventListener('keydown', async e => {
+        if (e.key !== 'c' && e.key !== 'C') return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+        if (!currentWatchVideoId()) return;
+        e.stopPropagation();
+        const s = await Storage.getSettings();
+        Storage.setSettings({ cinemaMode: !s.cinemaMode });
+    }, true);
+
     let autoHideMasthead = false;
     function applyAutoHideMastheadToggle(on) {
         autoHideMasthead = !!on;
@@ -286,7 +298,7 @@
         const btn = document.createElement('button');
         btn.id = CINEMA_BTN_ID;
         btn.className = 'ytp-button';
-        btn.title = 'Cinema mode (video only)';
+        btn.title = 'Cinema mode (video only) — c';
         btn.setAttribute('aria-label', 'Cinema mode');
         btn.setAttribute('aria-pressed', document.body.classList.contains('quick-block-cinema') ? 'true' : 'false');
         btn.innerHTML = `
@@ -847,15 +859,19 @@
     }
 
     // YT's own click handler both steals focus onto the button and scrolls it
-    // into view. In narrow/half-screen widths YT switches to a single-column
-    // layout, so that scrollIntoView drags the whole page down. Pin scroll
-    // position across the click and blur the button right after so it doesn't
-    // keep keyboard focus.
+    // into view. On narrow/half-screen widths YT stacks the comments panel
+    // above the metadata, so that scrollIntoView drags the whole page down.
+    // We only ever fire this right after landing on a watch page, so the top
+    // is always the right place to be — just force it back there.
+    // ponytail: three fixed nudges instead of observing YT's scroll animation;
+    // YT re-scrolls once the panel finishes rendering, so one call isn't enough.
     function clickCommentsButtonWithoutJump(btn) {
-        const x = window.scrollX, y = window.scrollY;
         btn.click();
-        btn.blur();
-        requestAnimationFrame(() => window.scrollTo(x, y));
+        btn.blur();   // don't leave keyboard focus parked on the toggle
+        const toTop = () => window.scrollTo(0, 0);
+        requestAnimationFrame(toTop);
+        setTimeout(toTop, 150);
+        setTimeout(toTop, 450);
     }
 
     async function reopenCommentsAfterFullscreenExit() {
