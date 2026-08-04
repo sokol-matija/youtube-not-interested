@@ -81,14 +81,19 @@ body.quick-block-ch-only ytd-engagement-panel-section-list-renderer[target-id*="
     display: none !important;
 }
 
-/* Button group lives in the #actions row beside the views · time-ago pills */
+/* Button group sits in #title-row, left of YouTube's views · date text.
+   #title (the <h1>) keeps the full row width, so long titles never collide. */
+ytd-watch-metadata #title-row:has(.qb-pl-pill) {
+    display: flex;
+    align-items: flex-start;
+}
+ytd-watch-metadata #title-row:has(.qb-pl-pill) #title { flex: 1 1 auto; min-width: 0; }
 .qb-pl-pill {
     flex: 0 0 auto;
-    align-self: center;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin-right: 12px;
+    margin: 0 12px;
 }
 
 /* Individual circular buttons, matching the hide-description toggle */

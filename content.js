@@ -1353,9 +1353,10 @@
         if (pill && pill.dataset.modes === sig) { syncPlaylistToggle(); return; }
 
         if (!pill) {
-            // Live in the #actions row next to the views · time-ago pills — the title
-            // row is too narrow and the buttons overlapped long titles.
-            const anchor = document.querySelector('ytd-watch-metadata #actions');
+            // #title-row (not #title) — #title holds the <h1>, so anchoring there
+            // overlapped long titles. #title-row also holds YouTube's own
+            // ytd-watch-info-text (views · date) on the right; sit next to that.
+            const anchor = document.querySelector('ytd-watch-metadata #title-row');
             if (!anchor) return;
             pill = document.createElement('div');
             pill.id = PLAYLIST_TOGGLE_ID;
@@ -1367,9 +1368,9 @@
                 e.stopPropagation();
                 applyPlaylistPanelMode(seg.dataset.mode);    // switch (no persistence)
             });
-            // Sit right after the views · time-ago pills when they're already mounted.
-            const stats = document.getElementById(WATCH_STATS_ID);
-            if (stats?.parentElement === anchor) stats.insertAdjacentElement('afterend', pill);
+            // Left of YouTube's views · date text when it's mounted, else right edge.
+            const info = anchor.querySelector('ytd-watch-info-text');
+            if (info) info.insertAdjacentElement('beforebegin', pill);
             else anchor.appendChild(pill);
         }
 
