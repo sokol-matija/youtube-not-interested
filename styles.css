@@ -81,17 +81,14 @@ body.quick-block-ch-only ytd-engagement-panel-section-list-renderer[target-id*="
     display: none !important;
 }
 
-/* Title row hosts the button group on its right edge; <h1> title stays left */
-ytd-watch-metadata #title:has(.qb-pl-pill) {
-    display: flex;
-    align-items: center;
-}
+/* Button group lives in the #actions row beside the views · time-ago pills */
 .qb-pl-pill {
     flex: 0 0 auto;
-    margin-left: auto;       /* push to the right edge of the title row */
     align-self: center;
-    display: flex;
+    display: inline-flex;
+    align-items: center;
     gap: 6px;
+    margin-right: 12px;
 }
 
 /* Individual circular buttons, matching the hide-description toggle */
@@ -1538,6 +1535,11 @@ body.quick-block-focus-mode ytd-browse[page-subtype="home"] #scroll-container {
     gap: 6px;
     margin-left: 12px;
     margin-right: 12px;   /* keep the last pill off the like button */
+}
+
+/* Hide the injected views · time-ago pills (option) */
+body.quick-block-hide-watch-stats #quick-block-watch-stats {
+    display: none !important;
 }
 
 /* Narrow window: #actions wraps to its own row right above the comments

@@ -335,6 +335,7 @@
             applyThanksToggle(newSettings.hideThanksButton);
             applySearchOnWatchToggle(newSettings.hideSearchOnWatch);
             applyDescriptionToggle(newSettings.hideDescription);
+            applyWatchStatsToggle(newSettings.hideWatchStats);
             applyTeaserCarouselToggle(newSettings.hideTeaserCarousel);
             applyMiniGuideToggle(newSettings.hideMiniGuide);
             applyAutoHideMastheadToggle(newSettings.autoHideMasthead);
@@ -1259,6 +1260,12 @@
     // Body-class hide, same mechanism as the share/thanks/comments toggles — CSS
     // hides #description via a body-scoped selector, so it survives the description
     // box rebuilding on SPA nav without any per-element reapply.
+    // Hide our injected views · time-ago pills (YouTube still shows them in the
+    // description box). Body class so it survives the #actions row rebuilding.
+    function applyWatchStatsToggle(on) {
+        document.body.classList.toggle('quick-block-hide-watch-stats', !!on);
+    }
+
     function applyDescriptionToggle(on) {
         hideDescription = !!on;
         document.body.classList.toggle('quick-block-hide-description', hideDescription);
@@ -1346,7 +1353,9 @@
         if (pill && pill.dataset.modes === sig) { syncPlaylistToggle(); return; }
 
         if (!pill) {
-            const anchor = document.querySelector('ytd-watch-metadata #title');
+            // Live in the #actions row next to the views · time-ago pills — the title
+            // row is too narrow and the buttons overlapped long titles.
+            const anchor = document.querySelector('ytd-watch-metadata #actions');
             if (!anchor) return;
             pill = document.createElement('div');
             pill.id = PLAYLIST_TOGGLE_ID;
@@ -1358,7 +1367,10 @@
                 e.stopPropagation();
                 applyPlaylistPanelMode(seg.dataset.mode);    // switch (no persistence)
             });
-            anchor.appendChild(pill);                            // right edge of the title row
+            // Sit right after the views · time-ago pills when they're already mounted.
+            const stats = document.getElementById(WATCH_STATS_ID);
+            if (stats?.parentElement === anchor) stats.insertAdjacentElement('afterend', pill);
+            else anchor.appendChild(pill);
         }
 
         // (Re)build buttons for the currently-offered modes.
@@ -2426,6 +2438,7 @@
         applyThanksToggle(settings.hideThanksButton);
         applySearchOnWatchToggle(settings.hideSearchOnWatch);
         applyDescriptionToggle(settings.hideDescription);
+        applyWatchStatsToggle(settings.hideWatchStats);
         applyTeaserCarouselToggle(settings.hideTeaserCarousel);
         applyMiniGuideToggle(settings.hideMiniGuide);
         applyAutoHideMastheadToggle(settings.autoHideMasthead);
