@@ -45,6 +45,7 @@
     const FOCUS_MSG_ID = 'quick-block-focus-message';
     const FOCUS_FAB_ID = 'quick-block-focus-fab';
     const WATCH_STATS_ID = 'quick-block-watch-stats';
+    let hideWatchStats = false;   // pref: don't mirror views · time ago into #actions
 
     // ── X button (Not Interested) ──────────────────────────────────────────────
     function addBlockButton(videoElement) {
@@ -483,6 +484,9 @@
     // Mirror views · time ago into the #actions row (next to like/share). Idempotent:
     // updates text in place, only writes DOM when the label actually changes.
     function injectWatchStats() {
+        // Setting off → never mount ours (and drop it if it's already there).
+        // Enforced in JS, not CSS, so nothing but our own node can be affected.
+        if (hideWatchStats) { document.getElementById(WATCH_STATS_ID)?.remove(); return; }
         if (!currentWatchVideoId()) return;
         const stats = extractWatchStats();
         if (!stats) return;
@@ -1260,10 +1264,12 @@
     // Body-class hide, same mechanism as the share/thanks/comments toggles — CSS
     // hides #description via a body-scoped selector, so it survives the description
     // box rebuilding on SPA nav without any per-element reapply.
-    // Hide our injected views · time-ago pills (YouTube still shows them in the
-    // description box). Body class so it survives the #actions row rebuilding.
+    // Hide our injected views · time-ago pills. Removes the node we created and
+    // stops re-injecting it; YouTube's own ytd-watch-info-text is untouched.
     function applyWatchStatsToggle(on) {
-        document.body.classList.toggle('quick-block-hide-watch-stats', !!on);
+        hideWatchStats = !!on;
+        if (hideWatchStats) document.getElementById(WATCH_STATS_ID)?.remove();
+        else injectWatchStats();
     }
 
     function applyDescriptionToggle(on) {

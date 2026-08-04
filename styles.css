@@ -1542,11 +1542,6 @@ body.quick-block-focus-mode ytd-browse[page-subtype="home"] #scroll-container {
     margin-right: 12px;   /* keep the last pill off the like button */
 }
 
-/* Hide the injected views · time-ago pills (option) */
-body.quick-block-hide-watch-stats #quick-block-watch-stats {
-    display: none !important;
-}
-
 /* Narrow window: #actions wraps to its own row right above the comments
    header with no gap. Without breathing room the wrapped pill visually
    collides with the comments count line. */
