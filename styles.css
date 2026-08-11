@@ -160,12 +160,11 @@ body.quick-block-hide-mini-guide ytd-page-manager {
     margin-left: 0 !important;
 }
 
-/* Watch Later grid computes its own right padding from the mini-guide width;
-   with the guide gone the grid overflows, so restore the gutter. Scoped by the
-   quick-block-on-watch-later body class set in content.js on SPA nav
-   (applyWatchLaterClass). */
+/* Watch Later grid overlaps the sticky playlist header once the mini guide is
+   gone, so push it off the left edge. Scoped by the quick-block-on-watch-later
+   body class set in content.js on SPA nav (applyWatchLaterClass). */
 body.quick-block-hide-mini-guide.quick-block-on-watch-later ytd-two-column-browse-results-renderer[page-subtype="playlist"] {
-    padding-right: 200px !important;
+    margin-left: 100px !important;
 }
 
 /* Watch counter — two circles (videos played, time watched today) next to the
