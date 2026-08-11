@@ -167,6 +167,11 @@ body.quick-block-hide-mini-guide.quick-block-on-watch-later ytd-two-column-brows
     margin-left: 100px !important;
 }
 
+/* "Unavailable videos are hidden" info banner on Watch Later. */
+body.quick-block-on-watch-later #alerts ytd-alert-with-button-renderer[type="INFO"] {
+    display: none !important;
+}
+
 /* Watch counter — two circles (videos played, time watched today) next to the
    hide-description toggle. Same chip language, like/dislike font (1.4rem/500). */
 #quick-block-watch-counter {
