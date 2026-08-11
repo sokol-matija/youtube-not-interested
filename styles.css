@@ -161,7 +161,8 @@ body.quick-block-hide-mini-guide ytd-page-manager {
 }
 
 /* Watch Later grid computes its own right padding from the mini-guide width;
-   with the guide gone the grid overflows, so restore the gutter. */
+   with the guide gone the grid overflows, so restore the gutter. Scoped by the
+   quick-block-on-watch-later body class set in content.js on SPA nav. */
 body.quick-block-hide-mini-guide.quick-block-on-watch-later ytd-two-column-browse-results-renderer[page-subtype="playlist"] {
     padding-right: 200px !important;
 }
