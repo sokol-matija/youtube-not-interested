@@ -1587,6 +1587,11 @@ html[dark] .qb-sum-toggle,
 html[dark] .qb-sum-toggle:hover,
 [dark] .qb-sum-toggle:hover { background: rgba(255,255,255,0.2); }
 
+/* Hide YouTube's own views · upload date line under the video title */
+body.quick-block-hide-native-watch-info ytd-watch-info-text {
+    display: none !important;
+}
+
 /* Hide watch description box (toggled via the inline button) */
 body.quick-block-hide-description ytd-watch-metadata #description {
     display: none !important;

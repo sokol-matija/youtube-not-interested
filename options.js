@@ -154,6 +154,7 @@ async function render() {
     $('#cinemaModeToggle').checked       = !!settings.cinemaMode;
     $('#hideDescriptionToggle').checked  = !!settings.hideDescription;
     $('#hideWatchStatsToggle').checked   = !!settings.hideWatchStats;
+    $('#hideNativeWatchInfoToggle').checked = !!settings.hideNativeWatchInfo;
     $('#hideTeaserCarouselToggle').checked = !!settings.hideTeaserCarousel;
     $('#hideMiniGuideToggle').checked    = !!settings.hideMiniGuide;
     $('#autoHideMastheadToggle').checked = !!settings.autoHideMasthead;
@@ -233,6 +234,7 @@ $('#hideSearchOnWatchToggle').addEventListener('change', e => Storage.setSetting
 $('#cinemaModeToggle').addEventListener('change', e => Storage.setSettings({ cinemaMode: e.target.checked }));
 $('#hideDescriptionToggle').addEventListener('change', e => Storage.setSettings({ hideDescription: e.target.checked }));
 $('#hideWatchStatsToggle').addEventListener('change', e => Storage.setSettings({ hideWatchStats: e.target.checked }));
+$('#hideNativeWatchInfoToggle').addEventListener('change', e => Storage.setSettings({ hideNativeWatchInfo: e.target.checked }));
 $('#hideTeaserCarouselToggle').addEventListener('change', e => Storage.setSettings({ hideTeaserCarousel: e.target.checked }));
 $('#hideMiniGuideToggle').addEventListener('change', e => Storage.setSettings({ hideMiniGuide: e.target.checked }));
 $('#autoHideMastheadToggle').addEventListener('change', e => Storage.setSettings({ autoHideMasthead: e.target.checked }));

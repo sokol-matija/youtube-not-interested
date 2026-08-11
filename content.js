@@ -337,6 +337,7 @@
             applySearchOnWatchToggle(newSettings.hideSearchOnWatch);
             applyDescriptionToggle(newSettings.hideDescription);
             applyWatchStatsToggle(newSettings.hideWatchStats);
+            applyNativeWatchInfoToggle(newSettings.hideNativeWatchInfo);
             applyTeaserCarouselToggle(newSettings.hideTeaserCarousel);
             applyMiniGuideToggle(newSettings.hideMiniGuide);
             applyAutoHideMastheadToggle(newSettings.autoHideMasthead);
@@ -1270,6 +1271,12 @@
         hideWatchStats = !!on;
         if (hideWatchStats) document.getElementById(WATCH_STATS_ID)?.remove();
         else injectWatchStats();
+    }
+
+    // Hide YouTube's own views · upload date line (ytd-watch-info-text). CSS-only:
+    // the node stays in the DOM so extractWatchStats() can still read it for our pills.
+    function applyNativeWatchInfoToggle(on) {
+        document.body.classList.toggle('quick-block-hide-native-watch-info', !!on);
     }
 
     function applyDescriptionToggle(on) {
@@ -2446,6 +2453,7 @@
         applySearchOnWatchToggle(settings.hideSearchOnWatch);
         applyDescriptionToggle(settings.hideDescription);
         applyWatchStatsToggle(settings.hideWatchStats);
+        applyNativeWatchInfoToggle(settings.hideNativeWatchInfo);
         applyTeaserCarouselToggle(settings.hideTeaserCarousel);
         applyMiniGuideToggle(settings.hideMiniGuide);
         applyAutoHideMastheadToggle(settings.autoHideMasthead);
