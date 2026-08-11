@@ -160,9 +160,9 @@ body.quick-block-hide-mini-guide ytd-page-manager {
     margin-left: 0 !important;
 }
 
-/* Playlist grid computes its own right padding from the mini-guide width; with
-   the guide gone the grid overflows, so restore the gutter. */
-body.quick-block-hide-mini-guide ytd-two-column-browse-results-renderer[page-subtype="playlist"] {
+/* Watch Later grid computes its own right padding from the mini-guide width;
+   with the guide gone the grid overflows, so restore the gutter. */
+body.quick-block-hide-mini-guide.quick-block-on-watch-later ytd-two-column-browse-results-renderer[page-subtype="playlist"] {
     padding-right: 200px !important;
 }
 

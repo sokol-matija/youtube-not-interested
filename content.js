@@ -222,6 +222,14 @@
         document.body.classList.toggle('quick-block-hide-mini-guide', !!on);
     }
 
+    // Watch Later grid needs its right gutter restored when the mini guide is
+    // hidden; CSS can't read the query string, so mark the page with a class.
+    function applyWatchLaterClass() {
+        const isWL = location.pathname === '/playlist'
+            && new URLSearchParams(location.search).get('list') === 'WL';
+        document.body.classList.toggle('quick-block-on-watch-later', isWL);
+    }
+
     // Picture-in-picture: "p" toggles PiP on the video (keypress = user
     // gesture, so requestPictureInPicture is allowed). Coming back to the
     // tab exits PiP automatically.
@@ -2412,6 +2420,7 @@
         resetPlaylistPanelState();   // new video → forget chapters/mode, re-derive from URL
         applyPlaylistPanelMode();
         applyOnWatchClass();
+        applyWatchLaterClass();
         applyWatchAutomations();
         applyFocusMode();
         injectFocusFab();
@@ -2456,6 +2465,7 @@
         applyNativeWatchInfoToggle(settings.hideNativeWatchInfo);
         applyTeaserCarouselToggle(settings.hideTeaserCarousel);
         applyMiniGuideToggle(settings.hideMiniGuide);
+        applyWatchLaterClass();
         applyAutoHideMastheadToggle(settings.autoHideMasthead);
         applyCinemaToggle(settings.cinemaMode);
         resetPlaylistPanelState();   // no memory — derive from current URL
