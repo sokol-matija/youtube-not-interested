@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/sokol-matija/youtube-not-interested/compare/v1.6.0...v1.6.1) (2026-08-15)
+
+
+### Bug Fixes
+
+* **security:** stop shipping the phone sync token in source ([94bad6c](https://github.com/sokol-matija/youtube-not-interested/commit/94bad6c5de71c8d2448e7e9395b35015c0cd10a4))
+
 # [1.6.0](https://github.com/sokol-matija/youtube-not-interested/compare/v1.5.0...v1.6.0) (2026-08-15)
 
 
