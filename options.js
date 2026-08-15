@@ -166,6 +166,14 @@ async function render() {
     $('#modelSelect').value              = settings.claudeModel || 'sonnet';
     $('#diagModelSelect').value          = settings.claudeModel || 'sonnet';
 
+    // Kept out of `settings` and read straight from storage: it is a credential,
+    // not a preference, and settings objects get logged and exported.
+    try {
+        const key = self.QuickBlockBridge?.SYNC_TOKEN_KEY || 'bridgeSyncToken';
+        const stored = await chrome.storage.local.get(key);
+        $('#syncTokenInput').value = stored[key] || '';
+    } catch {}
+
     // Scheduled Focus Mode
     $('#focusHideNowToggle').checked = !!settings.focusHideNow;
     $('#focusEnabledToggle').checked = !!settings.focusModeEnabled;
@@ -244,6 +252,12 @@ $('#autoTtsToggle').addEventListener('change', e => Storage.setSettings({ autoTt
 $('#karaokeToggle').addEventListener('change', e => Storage.setSettings({ karaokeEnabled: e.target.checked }));
 $('#karaokeWordCountSelect').addEventListener('change', e => Storage.setSettings({ karaokeWordCount: parseInt(e.target.value, 10) || 3 }));
 $('#modelSelect').addEventListener('change', e => Storage.setSettings({ claudeModel: e.target.value }));
+
+$('#syncTokenInput').addEventListener('change', async (e) => {
+    const key = self.QuickBlockBridge?.SYNC_TOKEN_KEY || 'bridgeSyncToken';
+    await chrome.storage.local.set({ [key]: e.target.value.trim() });
+    showToast(e.target.value.trim() ? 'Phone sync token saved' : 'Phone sync disabled');
+});
 $('#diagModelSelect').addEventListener('change', e => {
     Storage.setSettings({ claudeModel: e.target.value });
     $('#modelSelect').value = e.target.value;
