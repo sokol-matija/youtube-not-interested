@@ -9,7 +9,7 @@ import { spawn } from 'node:child_process';
 import {
     parseVideoId, getProfiles, getProfile, renderPrompt, formatDuration,
     segmentsToText, durationFromSegments, readRecord, writeRecord, listRecords,
-    fetchTitle, notify,
+    fetchTitle, notify, readAloud,
 } from './summary-store.mjs';
 
 const PORT = Number(process.env.PORT) || 7777;
@@ -468,6 +468,49 @@ async function handleApi(req, res, headers, pathname) {
             writeRecord(rec);
             console.log(`[${new Date().toISOString()}] regenerate ${videoId} → ${rec.status}`);
             runningJobs.delete(videoId);
+        })();
+        return;
+    }
+
+    const audio = pathname.match(/^\/api\/summaries\/([A-Za-z0-9_-]{11})\/audio$/);
+    if (req.method === 'POST' && audio) {
+        const videoId = audio[1];
+        const rec = readRecord(videoId);
+        if (!rec) return json(404, { ok: false, error: 'not found' });
+        if (!rec.markdown) return json(409, { ok: false, error: 'no summary to read yet' });
+        if (rec.audio?.status === 'running') return json(409, { ok: false, error: 'already generating' });
+
+        rec.audio = { status: 'running', ts: Date.now() };
+        writeRecord(rec);
+        json(202, { ok: true, videoId });
+
+        // Same fire-and-forget shape as the summary job: synthesizing a whole
+        // summary takes far longer than an HTTP request should stay open.
+        (async () => {
+            const result = await readAloud(rec.markdown, {
+                title: rec.title,
+                project: process.env.TTS_PROJECT || '/youtube-summaries',
+            });
+            const fresh = readRecord(videoId) || rec;
+            fresh.audio = {
+                status: result.ok ? 'done' : 'error',
+                ts: Date.now(),
+                lines: result.lines,
+                spoken: result.spoken,
+                filed: result.filed,
+                failed: result.failed,
+                project: result.project,
+                error: result.ok ? null : (result.error || 'synthesis failed'),
+            };
+            writeRecord(fresh);
+            console.log(`[${new Date().toISOString()}] audio ${videoId} → ${fresh.audio.status} (${result.spoken}/${result.lines} lines)`);
+            await notify(NTFY_TOPIC, {
+                title: result.ok ? `Audio ready: ${rec.title}` : `Audio failed: ${rec.title}`,
+                message: result.ok
+                    ? `${result.spoken} lines in the player`
+                    : (result.error || 'synthesis failed'),
+                videoId,
+            });
         })();
         return;
     }
