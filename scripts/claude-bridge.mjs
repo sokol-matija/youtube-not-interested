@@ -472,47 +472,22 @@ async function handleApi(req, res, headers, pathname) {
         return;
     }
 
+    // Hand the summary to the player. One append that returns in well under a
+    // second, so there is no job to track and nothing to poll or push about —
+    // the phone just shows a toast.
     const audio = pathname.match(/^\/api\/summaries\/([A-Za-z0-9_-]{11})\/audio$/);
     if (req.method === 'POST' && audio) {
         const videoId = audio[1];
         const rec = readRecord(videoId);
         if (!rec) return json(404, { ok: false, error: 'not found' });
         if (!rec.markdown) return json(409, { ok: false, error: 'no summary to read yet' });
-        if (rec.audio?.status === 'running') return json(409, { ok: false, error: 'already generating' });
 
-        rec.audio = { status: 'running', ts: Date.now() };
-        writeRecord(rec);
-        json(202, { ok: true, videoId });
-
-        // Same fire-and-forget shape as the summary job: synthesizing a whole
-        // summary takes far longer than an HTTP request should stay open.
-        (async () => {
-            const result = await readAloud(rec.markdown, {
-                title: rec.title,
-                project: process.env.TTS_PROJECT || '/youtube-summaries',
-            });
-            const fresh = readRecord(videoId) || rec;
-            fresh.audio = {
-                status: result.ok ? 'done' : 'error',
-                ts: Date.now(),
-                lines: result.lines,
-                spoken: result.spoken,
-                filed: result.filed,
-                failed: result.failed,
-                project: result.project,
-                error: result.ok ? null : (result.error || 'synthesis failed'),
-            };
-            writeRecord(fresh);
-            console.log(`[${new Date().toISOString()}] audio ${videoId} → ${fresh.audio.status} (${result.spoken}/${result.lines} lines)`);
-            await notify(NTFY_TOPIC, {
-                title: result.ok ? `Audio ready: ${rec.title}` : `Audio failed: ${rec.title}`,
-                message: result.ok
-                    ? `${result.spoken} lines in the player`
-                    : (result.error || 'synthesis failed'),
-                videoId,
-            });
-        })();
-        return;
+        const result = await readAloud(rec.markdown, {
+            videoId,
+            project: process.env.TTS_PROJECT || '/youtube-summaries',
+        });
+        console.log(`[${new Date().toISOString()}] audio ${videoId} → ${result.ok ? `sent ${result.chars}ch` : result.error}`);
+        return json(result.ok ? 200 : 502, result);
     }
 
     if (req.method === 'POST' && pathname === '/api/summarize') {

@@ -208,112 +208,65 @@ function asciiHeader(s) {
 }
 
 // ── Read aloud ──────────────────────────────────────────────────────────────
-// Sends the summary to the ttsplayer stack, which runs on the same host as this
-// bridge — hence localhost rather than the Tailscale name.
+// Hand the summary to the player and stop. This is exactly what the voice-mcp
+// `speak` tool does (voice_mcp.py:111-122): one append, no synthesis here. The
+// player owns cache-warming through the proxy, so calling the proxy ourselves
+// would only duplicate work it already does.
 //
-// Two calls per line, mirroring ~/Dev/scripts/tts-generate.sh:
-//   :8882  caching proxy in front of kokoro. NOT :8880, which is raw kokoro with
-//          no cache, so replays would re-synthesize every time.
-//   :7780  the player itself, so the entry actually shows up in the web UI
-//          foldered by project_path.
+// The player runs on this same host, hence localhost rather than the Tailscale
+// name.
 
-const TTS_ENDPOINT = process.env.TTS_ENDPOINT || 'http://localhost:8882/v1/audio/speech';
-const PLAYER_APPEND = process.env.PLAYER_APPEND || 'http://localhost:7780/api/logs/append?live=0';
+const PLAYER_APPEND = process.env.PLAYER_APPEND || 'http://localhost:7780/api/logs/append?live=1';
 const TTS_VOICE = process.env.TTS_VOICE || 'af_sky';
-const TTS_MODEL = process.env.TTS_MODEL || 'kokoro';
+const TTS_MODEL = process.env.TTS_MODEL || 'tts-1';
 
 /**
- * Markdown → lines a voice can actually read.
- *
- * Bullets, hashes and asterisks get spoken literally otherwise ("star star key
- * points star star"), so they are stripped rather than passed through. Long
- * paragraphs are split on sentence boundaries because the player treats one
- * POSTed line as one cache entry and one UI row.
+ * Markdown → plain prose. `speak`'s contract is "plain prose, no markdown", and
+ * unstripped syntax is read out literally ("star star key points star star").
  */
-export function toSpeechLines(markdown) {
-    const cleaned = String(markdown || '')
+export function toPlainProse(markdown) {
+    return String(markdown || '')
         .replace(/```[\s\S]*?```/g, ' ')       // code fences read as noise
         .replace(/`([^`]*)`/g, '$1')
         .replace(/^\s{0,3}#{1,6}\s*/gm, '')    // headings
         .replace(/^\s*[-*+]\s+/gm, '')         // bullet markers
         .replace(/\*\*(.+?)\*\*/g, '$1')
         .replace(/\*(.+?)\*/g, '$1')
-        .replace(/\[(.+?)\]\(.+?\)/g, '$1');   // links → their text
-
-    const lines = [];
-    for (const block of cleaned.split('\n')) {
-        const text = block.trim();
-        if (!text) continue;
-        // Split into sentences, keeping the terminator.
-        const sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
-        let buffer = '';
-        for (const sentence of sentences) {
-            const piece = sentence.trim();
-            if (!piece) continue;
-            // Merge very short fragments ("Verdict:") into the next sentence so
-            // the player does not end up with one-word rows.
-            if (buffer) { buffer += ' ' + piece; } else { buffer = piece; }
-            if (buffer.length >= 40) { lines.push(buffer); buffer = ''; }
-        }
-        if (buffer) lines.push(buffer);
-    }
-    return lines;
-}
-
-async function postJson(url, body, timeoutMs = 120_000) {
-    return fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
-    });
+        .replace(/\[(.+?)\]\(.+?\)/g, '$1')    // links → their text
+        .replace(/\n{2,}/g, '\n')
+        .trim();
 }
 
 /**
- * Synthesize every line and file it with the player. Returns per-line counts
- * rather than throwing on the first failure — a summary that is 90% narrated is
- * still worth listening to, and the caller reports what got through.
+ * One POST, same version-3 ingest contract as voice_mcp.py's `_entry`. The
+ * player takes it from here.
  */
-export async function readAloud(markdown, { title, project }) {
-    const lines = toSpeechLines(markdown);
-    if (!lines.length) return { ok: false, error: 'nothing to read', lines: 0 };
+export async function readAloud(markdown, { videoId, project } = {}) {
+    const text = toPlainProse(markdown);
+    if (!text) return { ok: false, error: 'nothing to read' };
 
-    const projectPath = project || '/youtube-summaries';
-    let spoken = 0, filed = 0, failed = 0;
+    const entry = {
+        version: 3,
+        timestamp: new Date().toISOString(),
+        conversation_id: videoId || 'yt-summary',
+        type: 'tts',
+        text,
+        project_path: project || '/youtube-summaries',
+        metadata: { voice: TTS_VOICE, model: TTS_MODEL, provider: 'yt-summary-bridge', transport: 'remote' },
+    };
 
-    // Serial: the proxy synthesizes on a single GPU/CPU pipeline, and firing a
-    // whole summary at it concurrently just queues internally with worse errors.
-    for (const line of lines) {
-        try {
-            const res = await postJson(TTS_ENDPOINT, {
-                model: TTS_MODEL, input: line, voice: TTS_VOICE, response_format: 'mp3',
-            });
-            if (!res.ok) { failed++; continue; }
-            // Drain the body so the cache write completes before the next call.
-            const buf = await res.arrayBuffer();
-            spoken++;
-
-            const entry = {
-                type: 'tts',
-                timestamp: new Date().toISOString().replace(/\.\d+Z$/, ''),
-                text: line,
-                metadata: {
-                    voice: TTS_VOICE,
-                    model: TTS_MODEL,
-                    // Same rough bytes→seconds ratio tts-generate.sh uses.
-                    playback_time: Number((buf.byteLength / 16000).toFixed(2)),
-                    project_path: projectPath,
-                    title: title || undefined,
-                },
-            };
-            const appendRes = await postJson(PLAYER_APPEND, entry, 30_000);
-            if (appendRes.ok) filed++;
-        } catch {
-            failed++;
-        }
+    try {
+        const res = await fetch(PLAYER_APPEND, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(entry),
+            signal: AbortSignal.timeout(15_000),
+        });
+        if (!res.ok) return { ok: false, error: `player returned ${res.status}` };
+        return { ok: true, chars: text.length };
+    } catch (e) {
+        return { ok: false, error: e.message };
     }
-
-    return { ok: spoken > 0, lines: lines.length, spoken, filed, failed, project: projectPath };
 }
 
 // ── Self-check ──────────────────────────────────────────────────────────────
@@ -351,16 +304,17 @@ if (process.argv[1] && process.argv[1].endsWith('summary-store.mjs')) {
 
     // Markdown must never reach the voice: "**Key points:**" would be read as
     // "star star key points star star".
-    const spoken = toSpeechLines(
+    const prose = toPlainProse(
         '## Key points\n' +
         '- The **first** point is short.\n' +
-        'A longer paragraph here. It has two sentences that each clear the merge threshold easily.\n',
+        'A [linked](http://x) phrase and `code`.\n',
     );
-    assert.ok(spoken.every(l => !/[*#`]/.test(l)), `markdown leaked: ${JSON.stringify(spoken)}`);
-    assert.ok(spoken.some(l => l.includes('first point')), 'bold text should survive unmarked');
-    assert.ok(spoken.every(l => l.trim().length > 0));
-    assert.equal(toSpeechLines('').length, 0);
-    assert.equal(toSpeechLines('   \n\n  ').length, 0);
+    assert.ok(!/[*#`]/.test(prose), `markdown leaked: ${prose}`);
+    assert.ok(prose.includes('first point'), 'bold text should survive unmarked');
+    assert.ok(prose.includes('linked') && !prose.includes('http://x'), 'link text kept, URL dropped');
+    // One blob, not one line per sentence — the player chunks, we do not.
+    assert.equal(toPlainProse(''), '');
+    assert.equal(toPlainProse('   \n\n  '), '');
 
     const profiles = getProfiles();
     assert.ok(profiles.length === 6, `expected 6 profiles, got ${profiles.length}`);
