@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/sokol-matija/youtube-not-interested/compare/v1.5.0...v1.6.0) (2026-08-15)
+
+
+### Features
+
+* mirror extension summaries into the phone app ([f40025a](https://github.com/sokol-matija/youtube-not-interested/commit/f40025a2afcafac351031feacbbe59d37c8f29dc))
+
 # [1.5.0](https://github.com/sokol-matija/youtube-not-interested/compare/v1.4.0...v1.5.0) (2026-08-15)
 
 
