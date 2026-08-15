@@ -490,6 +490,55 @@ async function handleApi(req, res, headers, pathname) {
         return json(result.ok ? 200 : 502, result);
     }
 
+    // The desktop extension already has a finished summary in hand; this files a
+    // copy so it shows up in the phone's history. Without it the two stores never
+    // meet — the extension keeps summaries in chrome.storage, the phone reads
+    // these JSON records.
+    if (req.method === 'POST' && pathname === '/api/summaries/import') {
+        const body = JSON.parse((await readBody(req)) || '{}');
+        const videoId = parseVideoId(body.videoId || body.url || '');
+        if (!videoId) return json(400, { ok: false, error: 'could not parse a YouTube video ID' });
+        if (typeof body.markdown !== 'string' || !body.markdown.trim()) {
+            return json(400, { ok: false, error: 'missing markdown' });
+        }
+
+        const existing = readRecord(videoId);
+        // Keep the previous text as a version rather than dropping it, matching
+        // what regenerate does — re-summarizing on the desktop should not silently
+        // destroy what is already on the phone.
+        const versions = existing?.markdown && existing.markdown !== body.markdown
+            ? [...(existing.versions || []), {
+                markdown: existing.markdown,
+                profileId: existing.profileId,
+                model: existing.model,
+                ts: existing.ts,
+            }].slice(-10)
+            : (existing?.versions || []);
+
+        const rec = {
+            ...(existing || {}),
+            videoId,
+            url: body.url || existing?.url || `https://www.youtube.com/watch?v=${videoId}`,
+            title: body.title || existing?.title || videoId,
+            author: body.author || existing?.author || '',
+            durationSec: body.durationSec ?? existing?.durationSec ?? 0,
+            // Carrying the transcript lets the phone regenerate without spending
+            // another YouTube fetch against the rate limiter.
+            transcript: body.transcript || existing?.transcript || '',
+            markdown: body.markdown,
+            profileId: body.profileId || existing?.profileId || 'standard',
+            model: body.model || existing?.model || DEFAULT_MODEL,
+            status: 'done',
+            error: null,
+            source: 'extension',
+            ts: Date.now(),
+            versions,
+        };
+        writeRecord(rec);
+        console.log(`[${new Date().toISOString()}] import ${videoId} ← extension (${body.markdown.length}ch)`);
+        return json(200, { ok: true, videoId });
+    }
+
     if (req.method === 'POST' && pathname === '/api/summarize') {
         const { url, profileId, model, force } = JSON.parse((await readBody(req)) || '{}');
         const videoId = parseVideoId(url);

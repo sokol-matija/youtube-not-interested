@@ -1695,6 +1695,21 @@
                 });
             } catch {}
 
+            // Mirror it to the phone app. Fire-and-forget: the drawer is already
+            // painted and the local cache already written, so nothing here is
+            // allowed to fail loudly.
+            self.QuickBlockBridge?.syncSummary?.({
+                videoId,
+                url: `https://www.youtube.com/watch?v=${videoId}`,
+                title: tr.title || '',
+                author: tr.author || '',
+                durationSec: totalSec,
+                markdown: summaryState.outputRaw,
+                profileId: activeProfile?.id || 'standard',
+                model,
+                transcript: transcriptText,
+            });
+
             const s = await Storage.getSettings();
 
             // Silent auto-summarize: open the panel the moment it's ready, no

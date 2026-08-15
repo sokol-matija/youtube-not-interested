@@ -14,7 +14,8 @@
     "*://*.youtube.com/*",
     "http://localhost:7777/*",
     "http://localhost:7779/*",
-    "http://sokol.falcon-parore.ts.net:8880/*"
+    "http://sokol.falcon-parore.ts.net:8880/*",
+    "http://sokol.falcon-parore.ts.net:7777/*"
   ],
   "icons": {
     "16": "icons/icon-16.png",
