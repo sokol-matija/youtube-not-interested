@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/sokol-matija/youtube-not-interested/compare/v1.4.0...v1.5.0) (2026-08-15)
+
+
+### Features
+
+* **bridge:** read a summary aloud into the ttsplayer cache ([95894f8](https://github.com/sokol-matija/youtube-not-interested/commit/95894f8306543891b37040e8a009906aa13a5a93))
+
 # [1.4.0](https://github.com/sokol-matija/youtube-not-interested/compare/v1.3.0...v1.4.0) (2026-08-15)
 
 
