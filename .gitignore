@@ -2,3 +2,6 @@ logs/
 .DS_Store
 scripts/.venv/
 node_modules/
+data/
+output/
+scripts/bridge.log

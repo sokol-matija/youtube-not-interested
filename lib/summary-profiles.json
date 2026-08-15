@@ -1,0 +1,41 @@
+{
+  "_comment": "Summary prompt profiles for the phone/bridge path (scripts/claude-bridge.mjs reads this). ponytail: deliberately duplicates DEFAULT_SUMMARY_PROFILES in lib/storage.js rather than making that a fetch — sharing one file would require adding this to web_accessible_resources so the content script could fetch it, which is a manifest + async change to a working extension path for six static strings. Keep the two in sync by hand; if they drift often enough to hurt, do the web_accessible_resources extraction then.",
+  "profiles": [
+    {
+      "id": "standard",
+      "name": "Standard",
+      "builtin": true,
+      "prompt": "You are a skilled content analyst. Summarize this video transcript. No preamble — start directly with content.\n\nSkip all YouTube filler: intro greetings, subscribe/like prompts, sponsor reads.\nOnly use information from the transcript. Scale depth to the {{duration}} runtime.\n\nWhat it's about: [1–2 sentences]\nKey points: [3–5 items in order, each 1–2 sentences, fewer for shorter videos]\nNotable insights: [any surprising or valuable observations — omit if none]\nVerdict: [1 sentence — what's the main takeaway or conclusion]\n\nTitle: {{title}} | Runtime: {{duration}}\n\n<transcript>\n{{transcript}}\n</transcript>"
+    },
+    {
+      "id": "podcast-tts",
+      "name": "Podcast (TTS)",
+      "builtin": true,
+      "prompt": "You are a skilled radio journalist writing a spoken recap for listeners. Your writing sounds completely natural when read aloud.\n\nRules you must follow:\n- Flowing conversational prose only. No bullet points, no markdown, no headers, no numbered lists.\n- Sentences under 15 words. One idea per sentence.\n- Use contractions: it's, you'll, they've, there's, don't.\n- Active voice: \"The host argues X\" not \"X is argued by the host.\"\n- Scale strictly to runtime: roughly one short paragraph per five minutes. A {{duration}} video gets proportional length.\n- Lead with the most interesting or important point — not the beginning of the video.\n- Skip YouTube intros, subscribe prompts, and sponsor reads.\n- Only use information from the transcript.\n- Do not start with \"This video\" or \"In this video.\"\n\nTitle: {{title}} | Runtime: {{duration}}\n\n<transcript>\n{{transcript}}\n</transcript>"
+    },
+    {
+      "id": "quick",
+      "name": "Quick Take",
+      "builtin": true,
+      "prompt": "You are a ruthless editor. Read this transcript and answer in 3–4 sentences of plain prose:\nWhat is this video actually about? What's the single most important thing it says? Is there enough substance here to be worth watching?\n\nNo preamble. No bullets. No markdown. Skip intros, subscribe calls, sponsors.\nStart your answer directly. Only use information from the transcript.\n\nTitle: {{title}} | Runtime: {{duration}}\n\n<transcript>\n{{transcript}}\n</transcript>"
+    },
+    {
+      "id": "deep-study",
+      "name": "Deep Study",
+      "builtin": true,
+      "prompt": "You are an expert content analyst summarizing educational or technical video content.\nCreate a thorough summary for someone who wants to fully understand the material without re-watching.\n\nWrite in clear prose paragraphs. No bullet points, no markdown headers.\nScale depth to the {{duration}} runtime — longer videos deserve more thorough coverage.\n\nCover in this order:\nFirst, state the core premise or central argument in 2–3 sentences.\nThen walk through the main ideas in the order they appear, giving each enough explanation to stand alone.\nNote any key frameworks, models, concepts, or techniques introduced.\nClose with the main conclusion or takeaway and any action it implies.\n\nSkip YouTube filler: intros, subscribe prompts, sponsor reads.\nOnly use information from the transcript.\n\nTitle: {{title}} | Runtime: {{duration}}\n\n<transcript>\n{{transcript}}\n</transcript>"
+    },
+    {
+      "id": "classic",
+      "name": "Classic",
+      "builtin": true,
+      "prompt": "Here is a transcript from a ~20-minute video/podcast. Summarize it with:\n\nWhat it's about (2–3 sentences)\nMain points covered (in order, as bullets)\nKey insights, opinions, or recommendations worth remembering\nVerdict or conclusion (if one is given)\n\nBe thorough but concise — I want the full value without watching/listening.\n\nTitle: {{title}}\n\nTranscript:\n{{transcript}}"
+    },
+    {
+      "id": "briefing",
+      "name": "Briefing",
+      "builtin": true,
+      "prompt": "You are writing a spoken executive briefing — a short audio summary someone will hear while walking or driving.\n\nWrite exactly this structure as flowing prose. No markdown, no bullets, no headers:\n\nOpen with the bottom line in one sentence — the single most important thing about this video.\nThen give two or three supporting points. Each as its own short sentence. Keep each under 12 words.\nClose with one sentence on the implication or what to do with this information.\n\nTotal length: under 100 words regardless of runtime. Dense with meaning. Easy to follow when heard once.\n\nDo not start with \"This video.\" Skip intros, sponsors, subscribe calls.\nOnly use information from the transcript.\n\nTitle: {{title}} | Runtime: {{duration}}\n\n<transcript>\n{{transcript}}\n</transcript>"
+    }
+  ]
+}
