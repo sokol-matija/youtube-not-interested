@@ -44,26 +44,40 @@ alive and nothing to configure.
 Only the Windows one matters for the phone. If the MacBook is asleep, the phone
 is unaffected — that is why the bridge lives there.
 
-## Known trap: launchd serves stale code after a `git pull`
+## Stale code after a `git pull`
 
-Neither job runs with `--watch`, so the process keeps the code it loaded at
-start. Pulling a fix and not restarting means the old code keeps running while
-the corrected file sits on disk. This has already caused two confusing bugs.
+A running process keeps the code it loaded at start, so pulling a fix without
+restarting leaves the old code serving while the corrected file sits on disk.
+This caused two confusing bugs before it was addressed.
 
-Restart after any pull:
+**macOS: handled.** The launchd job runs `node --watch`, which restarts the
+script whenever a file in its module graph changes. A `git pull` reloads it with
+no action. `KeepAlive` still covers crashes and reboots independently.
 
-```bash
-# macOS
-launchctl kickstart -k gui/$(id -u)/com.sokol.yt-bridge
+`--watch` runs the app in a child process, so the PID holding port 7779 is the
+child and only the launchd parent shows the `--watch` flag — both are correct.
+It watches the imported module graph only, so editing
+`lib/summary-profiles.json` (read at runtime, and cached in memory) still needs
+a manual restart.
 
-# Windows
+**Windows: still manual.** Restart after every pull:
+
+```powershell
 Stop-ScheduledTask -TaskName "YouTubeClaudeBridge"
 Start-ScheduledTask -TaskName "YouTubeClaudeBridge"
 ```
 
-To make the Mac reload itself instead, add `--watch` as `ProgramArguments[1]`
-(before the script path) and `launchctl kickstart -k` once. `KeepAlive` still
-covers reboots and crashes.
+```bash
+# macOS, if ever needed by hand (e.g. after editing the plist itself)
+launchctl bootout gui/$(id -u)/com.sokol.yt-bridge
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sokol.yt-bridge.plist
+```
+
+Editing the plist needs `bootout` + `bootstrap` — launchd caches the definition,
+so `kickstart` alone re-runs the old one.
+
+Confirm watch mode is live by touching the script and checking a new
+`claude-bridge ready` line appears in `~/.local/state/yt-bridge.log`.
 
 ## Extension gotchas
 
