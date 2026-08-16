@@ -1,3 +1,10 @@
+## [1.6.2](https://github.com/sokol-matija/youtube-not-interested/compare/v1.6.1...v1.6.2) (2026-08-16)
+
+
+### Bug Fixes
+
+* **sync:** run the phone sync from the service worker, not the content script ([27919e4](https://github.com/sokol-matija/youtube-not-interested/commit/27919e4ef02354915e15143d1a58a887c958ea99))
+
 ## [1.6.1](https://github.com/sokol-matija/youtube-not-interested/compare/v1.6.0...v1.6.1) (2026-08-15)
 
 
