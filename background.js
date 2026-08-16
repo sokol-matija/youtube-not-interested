@@ -37,7 +37,52 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         ttsGenerate(msg.text).then(sendResponse);
         return true;
     }
+    if (msg?.type === 'sync-summary') {
+        syncSummary(msg.payload).then(sendResponse);
+        return true;
+    }
 });
+
+// ── Phone sync ──────────────────────────────────────────────────────────────
+// File a finished summary with the always-on Windows bridge so it appears in the
+// phone app's history.
+//
+// This lives in the service worker rather than the content script for the same
+// reason KOKORO_BASE does: a content script on an https://www.youtube.com page
+// cannot fetch plain http:// to a remote host — Chrome blocks it as mixed
+// content, silently from the caller's point of view. http://localhost is exempt
+// (it counts as a secure context), which is why the 7777/7779 bridge calls work
+// from the page but this one could not.
+const SYNC_BASE = 'http://sokol.falcon-parore.ts.net:7777';
+const SYNC_TOKEN_KEY = 'bridgeSyncToken';
+
+async function syncSummary(payload) {
+    if (!payload?.videoId || !payload?.markdown) {
+        return { ok: false, error: 'incomplete payload' };
+    }
+    let token = '';
+    try {
+        const stored = await chrome.storage.local.get(SYNC_TOKEN_KEY);
+        token = stored[SYNC_TOKEN_KEY] || '';
+    } catch {}
+    // Not configured on this machine — a no-op, not a failure.
+    if (!token) return { ok: false, skipped: true, error: 'no sync token set' };
+
+    try {
+        const res = await fetch(`${SYNC_BASE}/api/summaries/import`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+}
 
 async function ttsGenerate(text) {
     if (!text || typeof text !== 'string') {

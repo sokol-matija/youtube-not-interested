@@ -1552,6 +1552,22 @@
         }
     }
 
+    // Mirror a finished summary to the phone app. Distinguishes "sync is off" from
+    // "sync is broken": an unconfigured machine says nothing, a configured one that
+    // fails shows a toast. The silent-either-way version hid a mixed-content bug
+    // through several rounds of testing.
+    async function syncToPhone(payload) {
+        try {
+            const res = await chrome.runtime.sendMessage({ type: 'sync-summary', payload });
+            if (!res?.ok && !res?.skipped) {
+                showSummaryToast(`Phone sync failed: ${res?.error || 'unknown'}`, { error: true });
+            }
+        } catch {
+            // Extension reloaded out from under this tab — the summary itself is
+            // already saved locally, so this is not worth interrupting for.
+        }
+    }
+
     async function runSummarize() {
         if (summaryState.running) return;
         summaryState.running = true;
@@ -1695,10 +1711,11 @@
                 });
             } catch {}
 
-            // Mirror it to the phone app. Fire-and-forget: the drawer is already
-            // painted and the local cache already written, so nothing here is
-            // allowed to fail loudly.
-            self.QuickBlockBridge?.syncSummary?.({
+            // Mirror it to the phone app. The summary is already painted and
+            // cached locally, so this never blocks — but a configured sync that
+            // fails does say so. Staying silent through a real failure is what
+            // made the mixed-content bug so hard to spot.
+            syncToPhone({
                 videoId,
                 url: `https://www.youtube.com/watch?v=${videoId}`,
                 title: tr.title || '',
