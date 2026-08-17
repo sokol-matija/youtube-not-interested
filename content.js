@@ -502,6 +502,15 @@
             if (li) activate(current[+li.dataset.i]);
         });
 
+        // Vivaldi (and Chrome with some settings) swallow the first Escape at
+        // browser level to blur the focused field, so that keydown never reaches
+        // the page — one press blurred, a second closed. Treating "input lost
+        // focus" as dismissal makes one press enough. preventDefault on the list's
+        // mousedown stops row clicks from stealing focus, so blur only ever means
+        // the palette was actually dismissed.
+        ul.addEventListener('mousedown', (e) => e.preventDefault());
+        input.addEventListener('blur', () => closePalette());
+
         // Escape has to be handled in capture on document: YouTube stops the event
         // before it reaches the input, so a listener on the input never fires.
         palette._onEsc = () => { if (mode) toRoot(); else closePalette(); };
