@@ -318,9 +318,14 @@
 
     function closePalette() {
         if (!palette) return;
-        document.removeEventListener('pointerdown', palette._onOutside, true);
-        palette.remove();
+        // Clear the handle BEFORE removing: detaching the focused input fires
+        // blur synchronously, whose handler calls back in here. Nulling last
+        // let that re-entry hit remove() mid-removal, which throws
+        // NotFoundError and aborts whatever action was being activated.
+        const el = palette;
         palette = null;
+        document.removeEventListener('pointerdown', el._onOutside, true);
+        el.remove();
     }
 
     function openPalette() {
