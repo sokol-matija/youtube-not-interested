@@ -483,10 +483,7 @@
         // and toggle captions on the video underneath, and trip our own p / c keys.
         input.addEventListener('keydown', (e) => {
             e.stopPropagation();
-            if (e.key === 'Escape') {
-                if (mode) toRoot();
-                else closePalette();
-            } else if (e.key === 'ArrowDown') {
+            if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 sel = Math.min(sel + 1, current.length - 1);
                 render();
@@ -505,6 +502,10 @@
             if (li) activate(current[+li.dataset.i]);
         });
 
+        // Escape has to be handled in capture on document: YouTube stops the event
+        // before it reaches the input, so a listener on the input never fires.
+        palette._onEsc = () => { if (mode) toRoot(); else closePalette(); };
+
         palette._onOutside = (e) => {
             if (palette && !palette.contains(e.target)) closePalette();
         };
@@ -522,6 +523,12 @@
 
     // capture:true + stopImmediatePropagation is what beats YouTube's own keys.
     document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && palette) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            palette._onEsc();
+            return;
+        }
         if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
         if (e.key.toLowerCase() !== 'k') return;
         e.preventDefault();
