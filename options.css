@@ -210,6 +210,12 @@ body {
 }
 .row select:focus { outline: none; border-color: var(--accent); }
 
+/* ── Range slider (command palette size) ─────────────────────────── */
+
+.range-row { display: flex; align-items: center; gap: 10px; flex: none; }
+.range-row input[type="range"] { width: 120px; accent-color: var(--accent); cursor: pointer; }
+.range-value { font-size: 12px; color: var(--text-mute); min-width: 34px; text-align: right; }
+
 /* ── Stat strip ──────────────────────────────────────────────────── */
 
 .stat-strip {

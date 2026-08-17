@@ -174,6 +174,8 @@ async function render() {
     $('#autoTtsToggle').checked          = !!settings.autoTts;
     $('#karaokeToggle').checked          = settings.karaokeEnabled !== false;
     $('#karaokeWordCountSelect').value   = String(settings.karaokeWordCount || 3);
+    $('#paletteScaleRange').value        = String(settings.paletteScale || 1);
+    $('#paletteScaleValue').textContent  = `${Number(settings.paletteScale || 1).toFixed(1)}×`;
     $('#modelSelect').value              = settings.claudeModel || 'sonnet';
     $('#diagModelSelect').value          = settings.claudeModel || 'sonnet';
 
@@ -294,6 +296,11 @@ $('#autoSummarizeSilentToggle').addEventListener('change', e => Storage.setSetti
 $('#autoTtsToggle').addEventListener('change', e => Storage.setSettings({ autoTts: e.target.checked }));
 $('#karaokeToggle').addEventListener('change', e => Storage.setSettings({ karaokeEnabled: e.target.checked }));
 $('#karaokeWordCountSelect').addEventListener('change', e => Storage.setSettings({ karaokeWordCount: parseInt(e.target.value, 10) || 3 }));
+$('#paletteScaleRange').addEventListener('input', e => {
+    const scale = Math.min(2, Math.max(0.8, parseFloat(e.target.value) || 1));
+    $('#paletteScaleValue').textContent = `${scale.toFixed(1)}×`;
+    Storage.setSettings({ paletteScale: scale });
+});
 $('#modelSelect').addEventListener('change', e => Storage.setSettings({ claudeModel: e.target.value }));
 
 $('#syncTokenInput').addEventListener('change', async (e) => {

@@ -524,7 +524,13 @@
         // content script skips this and just shows the navigation rows.
         render();
         if (extensionAlive()) {
-            Storage.getSettings().then(s => { cfg = s; render(); }).catch(() => {});
+            Storage.getSettings().then(s => {
+                cfg = s;
+                // Sizing lands with the settings snapshot; until then the CSS
+                // default (scale 1) applies, so the palette never renders blank.
+                if (s.paletteScale) palette?.style.setProperty('--qb-pal-scale', String(s.paletteScale));
+                render();
+            }).catch(() => {});
             Storage.getSummaryProfiles().then(p => { profiles = p; }).catch(() => {});
         }
         input.focus();
