@@ -521,8 +521,10 @@
         input.focus();
     }
 
-    // capture:true + stopImmediatePropagation is what beats YouTube's own keys.
-    document.addEventListener('keydown', (e) => {
+    // window + capture:true is the earliest point in the dispatch path — earlier
+    // than YouTube's own document-capture Escape handler, which otherwise ate the
+    // first press. stopImmediatePropagation keeps it from reaching them at all.
+    window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && palette) {
             e.preventDefault();
             e.stopImmediatePropagation();
