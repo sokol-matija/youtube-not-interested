@@ -17,6 +17,17 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     });
 });
 
+// Deep link: options.html#some-card — switch to the panel owning that element
+// and scroll it into view. Used by the ⌘K "Focus break history" row.
+function openHashTarget() {
+    const target = location.hash && document.querySelector(location.hash);
+    if (!target) return;
+    const panel = target.closest('.panel');
+    document.querySelector(`.nav-item[data-panel="${panel?.id.replace('panel-', '')}"]`)?.click();
+    target.scrollIntoView({ block: 'center' });
+}
+window.addEventListener('hashchange', openHashTarget);
+
 // ── Toast ─────────────────────────────────────────────────────────────────────
 
 function showToast(msg) {
@@ -189,7 +200,9 @@ async function render() {
     // While the schedule is on, lock days + times — editing them would dodge the
     // window. To change them, turn the schedule off first (password-gated).
     setFocusControlsLocked(!!settings.focusModeEnabled);
+    focusSnoozeUntil = Number(settings.focusSnoozeUntil) || 0;
     renderFocusStatus();
+    renderFocusBreaks();
 
     await loadProfiles();
 
@@ -215,6 +228,36 @@ async function render() {
             li.appendChild(btn);
             list.appendChild(li);
         }
+    }
+}
+
+// Log of every confirmed "end focus for today", newest first.
+async function renderFocusBreaks() {
+    const list = $('#focusBreakList');
+    if (!list) return;
+    const breaks = await Storage.getFocusBreaks();
+    list.innerHTML = '';
+    if (breaks.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'empty';
+        li.textContent = 'No focus breaks yet.';
+        list.appendChild(li);
+        return;
+    }
+    for (const b of breaks) {
+        const li = document.createElement('li');
+        li.className = 'focus-break';
+        const when = document.createElement('span');
+        when.className = 'focus-break-when';
+        when.textContent = new Date(b.ts).toLocaleString();
+        const reason = document.createElement('span');
+        reason.className = 'focus-break-reason';
+        reason.textContent = b.reason || '—';
+        const doing = document.createElement('span');
+        doing.className = 'focus-break-doing';
+        doing.textContent = b.doing ? `Should have been: ${b.doing}` : '';
+        li.append(when, reason, doing);
+        list.appendChild(li);
     }
 }
 
@@ -282,12 +325,16 @@ function setFocusControlsLocked(locked) {
     $('#focusStart').disabled = locked;
     $('#focusEnd').disabled = locked;
 }
+let focusSnoozeUntil = 0;   // mirrors the setting, so the status line can read it
 function renderFocusStatus() {
     const el = $('#focusStatus');
     if (!el) return;
     if ($('#focusHideNowToggle').checked) {
         el.textContent = '● Hidden now (manual override)';
         el.className = 'focus-status active';
+    } else if (focusSnoozeUntil > Date.now()) {
+        el.textContent = '○ Ended for today — schedule resumes tomorrow';
+        el.className = 'focus-status';
     } else if (!$('#focusEnabledToggle').checked) {
         el.textContent = 'Schedule off';
         el.className = 'focus-status';
@@ -496,5 +543,5 @@ $('#claudeCopyBtn').addEventListener('click', async () => {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 chrome.storage.onChanged.addListener(() => render());
-render();
+render().then(openHashTarget);   // list must exist before scrolling to it
 pingBridge();

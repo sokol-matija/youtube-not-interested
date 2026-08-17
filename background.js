@@ -37,6 +37,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         ttsGenerate(msg.text).then(sendResponse);
         return true;
     }
+    // Content scripts can't call openOptionsPage themselves.
+    if (msg?.type === 'open-options') {
+        // openOptionsPage can't carry a hash, so deep links go through tabs.create.
+        if (msg.hash) chrome.tabs.create({ url: chrome.runtime.getURL('options.html' + msg.hash) });
+        else chrome.runtime.openOptionsPage();
+        return;
+    }
     if (msg?.type === 'sync-summary') {
         syncSummary(msg.payload).then(sendResponse);
         return true;

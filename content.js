@@ -33,6 +33,7 @@
     let focusBeam = true;
     let focusActive = false;
     let focusLockUntil = 0;              // epoch ms: timed FAB lock; 0 = not locked
+    let focusSnoozeUntil = 0;            // epoch ms: "ended for today" — schedule suppressed until then
     // Friction (not security): same password as the options-page schedule unlock.
     const FOCUS_UNLOCK = 'j5q8rqwp521c1';
     const FOCUS_LOCK_DURATIONS = [       // dropdown on the masthead focus FAB
@@ -233,11 +234,7 @@
     // Picture-in-picture: "p" toggles PiP on the video (keypress = user
     // gesture, so requestPictureInPicture is allowed). Coming back to the
     // tab exits PiP automatically.
-    document.addEventListener('keydown', e => {
-        if (e.key !== 'p' && e.key !== 'P') return;
-        if (e.ctrlKey || e.metaKey || e.altKey) return;
-        const t = e.target;
-        if (t.closest?.('input, textarea, select, [contenteditable]')) return;
+    function togglePip() {
         const v = document.querySelector('video.html5-main-video')
             || document.querySelector('video');
         if (!v) return;
@@ -246,6 +243,14 @@
         } else {
             v.requestPictureInPicture().catch(() => {});
         }
+    }
+
+    document.addEventListener('keydown', e => {
+        if (e.key !== 'p' && e.key !== 'P') return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        const t = e.target;
+        if (t.closest?.('input, textarea, select, [contenteditable]')) return;
+        togglePip();
     });
 
     window.addEventListener('focus', () => {
@@ -264,6 +269,264 @@
         e.stopPropagation();
         const s = await Storage.getSettings();
         Storage.setSettings({ cinemaMode: !s.cinemaMode });
+    }, true);
+
+    // ── ⌘K / Ctrl+K command palette ───────────────────────────────────────────
+    // One popup for navigation, setting toggles and one-off actions, so the
+    // options page stays optional. Built on open, thrown away on close — every
+    // page-scoped row is therefore recomputed per open and SPA nav can never
+    // leave a stale action behind.
+    let palette = null;
+
+    const PALETTE_STATIC = [
+        { name: 'Home',          url: '/',                   alias: 'home feed' },
+        { name: 'Subscriptions', url: '/feed/subscriptions', alias: 'subs' },
+        { name: 'Watch Later',   url: '/playlist?list=WL',   alias: 'wl later queue' },
+        { name: 'History',       url: '/feed/history',       alias: 'watched' },
+    ];
+
+    // Settings reachable from the palette. Every key here is handled by the
+    // storage.onChanged listener above, so writing is all a toggle has to do.
+    const PALETTE_TOGGLES = [
+        { key: 'hideEnabled',        name: 'Hide watched / not-interested videos' },
+        { key: 'cinemaMode',         name: 'Cinema mode' },
+        { key: 'focusHideNow',       name: 'Focus mode: hide feed now' },
+        { key: 'autoOpenComments',   name: 'Auto-open comments' },
+        { key: 'hideBottomComments', name: 'Hide comments section' },
+        { key: 'hideDescription',    name: 'Hide description' },
+        { key: 'hideShareButton',    name: 'Hide share button' },
+        { key: 'hideMiniGuide',      name: 'Hide collapsed sidebar' },
+        { key: 'autoHideMasthead',   name: 'Auto-hide top bar on scroll' },
+        { key: 'hideTeaserCarousel', name: 'Hide teaser carousel' },
+        { key: 'karaokeEnabled',     name: 'Karaoke highlighting' },
+        { key: 'autoTts',            name: 'Auto read aloud' },
+    ];
+
+    // Row icons: inline monochrome SVG, stroked with currentColor (no emoji).
+    const PALETTE_ICON = {
+        arrow:   '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+        sliders: '<svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h10M18 18h2"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg>',
+        chevron: '<svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>',
+        text:    '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
+        link:    '<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>',
+        user:    '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+        pip:     '<svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="12" width="8" height="6" rx="1"/></svg>',
+        moon:    '<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
+    };
+
+    const PALETTE_PLACEHOLDER = 'Go to, toggle a setting, or run an action…';
+
+    function closePalette() {
+        if (!palette) return;
+        document.removeEventListener('pointerdown', palette._onOutside, true);
+        palette.remove();
+        palette = null;
+    }
+
+    function openPalette() {
+        if (palette) { closePalette(); return; }
+        if (document.getElementById(FOCUS_BREAK_ID)) return;   // modal owns the keyboard
+
+        palette = document.createElement('div');
+        palette.id = 'qb-palette';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = PALETTE_PLACEHOLDER;
+        const ul = document.createElement('ul');
+        palette.append(input, ul);
+        document.body.append(palette);
+
+        let cfg = {};        // settings snapshot — pills read OFF until it lands
+        let profiles = [];   // summary profiles, for the submenu
+        let current = [];    // rows as last rendered, index-aligned with the <li>s
+        let sel = 0;
+        let mode = null;     // null = root list, 'profiles' = second level
+
+        // Page-scoped availability, decided once per open.
+        const videoId = currentWatchVideoId();
+        const hasVideo = !!document.querySelector('video');
+
+        const actionRows = () => [
+            ...(videoId ? [
+                { action: 'summarize', name: 'Summarize this video',      alias: 'summary ai',    glyph: 'text' },
+                { action: 'copyLink',  name: 'Copy video link',           alias: 'url share',     glyph: 'link' },
+                { action: 'copyStamp', name: 'Copy link at current time', alias: 'timestamp url', glyph: 'link' },
+                { action: 'channel',   name: 'Open channel of this video', alias: 'creator',      glyph: 'user' },
+            ] : []),
+            ...(hasVideo ? [
+                { action: 'pip', name: 'Toggle picture-in-picture', alias: 'pip float', glyph: 'pip' },
+            ] : []),
+            // Only offered while focus is actually on and not password-locked —
+            // the lock has its own (deliberately harder) exit.
+            ...(focusActive && !focusLocked() ? [
+                { action: 'endFocus', name: 'End focus for today', alias: 'dnd stop unblock home feed', glyph: 'moon' },
+            ] : []),
+            { action: 'profiles', name: 'Summary style…', alias: 'profile prompt', glyph: 'chevron' },
+            { action: 'options',  name: 'Extension settings', alias: 'options preferences', glyph: 'sliders' },
+            { action: 'options',  name: 'Focus break history', hash: '#focus-breaks', alias: 'dnd log reasons why', glyph: 'moon' },
+        ];
+
+        // Rows are built with the DOM API, never innerHTML — profile names are
+        // user-authored and video/channel text is remote.
+        const render = () => {
+            const q = input.value.trim().toLowerCase();
+            const source = mode === 'profiles'
+                ? profiles.map(p => ({ profileId: p.id, name: p.name, glyph: 'text' }))
+                : [...PALETTE_STATIC, ...PALETTE_TOGGLES, ...actionRows()];
+            current = source
+                .filter(s => s.name.toLowerCase().includes(q) || (s.alias || '').includes(q))
+                .slice(0, 12);
+            sel = Math.min(sel, Math.max(current.length - 1, 0));
+            ul.replaceChildren(...current.map((s, i) => {
+                const li = document.createElement('li');
+                li.dataset.i = i;
+                if (i === sel) li.className = 'sel';
+                const ico = document.createElement('span');
+                ico.className = 'qb-pal-ico';
+                ico.innerHTML = PALETTE_ICON[s.glyph] || PALETTE_ICON[s.key ? 'sliders' : 'arrow'];
+                li.append(ico, document.createTextNode(s.name));
+                if (s.key) {
+                    const on = !!cfg[s.key];
+                    const sw = document.createElement('span');
+                    sw.className = on ? 'qb-pal-sw on' : 'qb-pal-sw';
+                    sw.textContent = on ? 'ON' : 'OFF';
+                    li.append(sw);
+                } else if (s.profileId && s.profileId === cfg.activeSummaryProfileId) {
+                    const dot = document.createElement('span');
+                    dot.className = 'qb-pal-dot';
+                    dot.textContent = '●';
+                    li.append(dot);
+                }
+                return li;
+            }));
+            ul.querySelector('li.sel')?.scrollIntoView({ block: 'nearest' });
+        };
+
+        const toRoot = () => {
+            mode = null;
+            input.value = '';
+            input.placeholder = PALETTE_PLACEHOLDER;
+            sel = 0;
+            render();
+        };
+
+        // Shared by Enter and by clicking a row.
+        const activate = (item) => {
+            if (!item) return;
+            if (item.key) {
+                // Toggle: write and re-render, palette stays open so several can
+                // be flipped in a row. storage.onChanged applies it to the page.
+                cfg[item.key] = !cfg[item.key];
+                Storage.setSettings({ [item.key]: cfg[item.key] }).catch(() => {});
+                render();
+                return;
+            }
+            if (item.profileId) {
+                Storage.setSettings({ activeSummaryProfileId: item.profileId }).catch(() => {});
+                closePalette();
+                return;
+            }
+            if (!item.action) {
+                closePalette();
+                location.assign(item.url);
+                return;
+            }
+            if (item.action === 'profiles') {
+                mode = 'profiles';
+                input.value = '';
+                input.placeholder = 'Summary style…';
+                sel = 0;
+                render();
+                return;
+            }
+            // Everything below closes first — Enter still counts as the user
+            // gesture PiP and the clipboard need.
+            const video = document.querySelector('video');
+            const channelHref = document.querySelector(
+                'ytd-video-owner-renderer a.yt-simple-endpoint, #owner a.yt-simple-endpoint'
+            )?.getAttribute('href');
+            closePalette();
+            switch (item.action) {
+                case 'summarize':
+                    injectSummaryUI();
+                    openDrawer();
+                    if (!summaryState.running && !summaryState.summarized) runSummarize();
+                    break;
+                case 'pip':
+                    togglePip();
+                    break;
+                case 'copyLink':
+                    navigator.clipboard.writeText(`https://youtu.be/${videoId}`).catch(() => {});
+                    break;
+                case 'copyStamp':
+                    navigator.clipboard.writeText(
+                        `https://youtu.be/${videoId}?t=${Math.floor(video?.currentTime || 0)}`
+                    ).catch(() => {});
+                    break;
+                case 'channel':
+                    if (channelHref) location.assign(channelHref);
+                    break;
+                case 'endFocus':
+                    openFocusBreakModal();
+                    break;
+                case 'options':
+                    if (extensionAlive()) {
+                        chrome.runtime.sendMessage({ type: 'open-options', hash: item.hash })?.catch?.(() => {});
+                    }
+                    break;
+            }
+        };
+
+        input.addEventListener('input', () => { sel = 0; render(); });
+
+        // stopPropagation is load-bearing: without it, typing "later" would seek
+        // and toggle captions on the video underneath, and trip our own p / c keys.
+        input.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape') {
+                if (mode) toRoot();
+                else closePalette();
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                sel = Math.min(sel + 1, current.length - 1);
+                render();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                sel = Math.max(sel - 1, 0);
+                render();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                activate(current[sel]);
+            }
+        });
+
+        ul.addEventListener('click', (e) => {
+            const li = e.target.closest('li');
+            if (li) activate(current[+li.dataset.i]);
+        });
+
+        palette._onOutside = (e) => {
+            if (palette && !palette.contains(e.target)) closePalette();
+        };
+        document.addEventListener('pointerdown', palette._onOutside, true);
+
+        // Two-phase render: draw now, redraw when storage answers. An orphaned
+        // content script skips this and just shows the navigation rows.
+        render();
+        if (extensionAlive()) {
+            Storage.getSettings().then(s => { cfg = s; render(); }).catch(() => {});
+            Storage.getSummaryProfiles().then(p => { profiles = p; }).catch(() => {});
+        }
+        input.focus();
+    }
+
+    // capture:true + stopImmediatePropagation is what beats YouTube's own keys.
+    document.addEventListener('keydown', (e) => {
+        if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+        if (e.key.toLowerCase() !== 'k') return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openPalette();
     }, true);
 
     let autoHideMasthead = false;
@@ -369,6 +632,7 @@
             if (typeof newSettings.focusMessage === 'string') focusMessage = newSettings.focusMessage;
             focusBeam = newSettings.focusBeam !== false;
             focusLockUntil = Number(newSettings.focusLockUntil) || 0;
+            focusSnoozeUntil = Number(newSettings.focusSnoozeUntil) || 0;
             applyFocusMode();
 
             // Keep the drawer's style picker in sync if the active profile was
@@ -549,10 +813,20 @@
         return focusLocked() ? Math.ceil((focusLockUntil - Date.now()) / 60000) : 0;
     }
 
+    function focusSnoozed() { return focusSnoozeUntil > Date.now(); }
+
     function focusShouldBeOn() {
         if (focusLocked()) return true; // timed lock forces focus on
-        if (focusHideNow) return true;  // manual override
+        if (focusHideNow) return true;  // manual override — still wins over a snooze
+        if (focusSnoozed()) return false; // "ended for today": suppress the schedule
         return focusModeEnabled && isInFocusWindow(new Date(), focusDays, focusStart, focusEnd);
+    }
+
+    // Local midnight tonight — the boundary for "rest of day" / "for today".
+    function endOfToday() {
+        const d = new Date();
+        d.setHours(23, 59, 59, 999);
+        return d.getTime();
     }
 
     // Minutes from now until the active window's end boundary.
@@ -717,15 +991,59 @@
     // local midnight). focusHideNow forces focus on; focusLockUntil pins it there
     // until the timer expires or the password is entered on the FAB.
     function startLockedFocus(minutes) {
-        let until;
-        if (minutes === 'rest') {
-            const d = new Date();
-            d.setHours(23, 59, 59, 999);
-            until = d.getTime();
-        } else {
-            until = Date.now() + minutes * 60000;
-        }
-        Storage.setSettings({ focusHideNow: true, focusLockUntil: until });
+        const until = minutes === 'rest' ? endOfToday() : Date.now() + minutes * 60000;
+        // Starting a session overrides any earlier "ended for today".
+        Storage.setSettings({ focusHideNow: true, focusLockUntil: until, focusSnoozeUntil: 0 });
+    }
+
+    // "End focus for today" — the whole point is the friction: you have to name a
+    // reason and the thing you should be doing instead, then confirm, before the
+    // home feed comes back. Confirmed breaks are logged (options → Focus Mode).
+    const FOCUS_BREAK_ID = 'quick-block-focus-break';
+
+    function openFocusBreakModal() {
+        if (document.getElementById(FOCUS_BREAK_ID)) return;
+
+        const wrap = document.createElement('div');
+        wrap.id = FOCUS_BREAK_ID;
+        wrap.innerHTML = `
+            <div class="qb-break-card" role="dialog" aria-modal="true" aria-label="End focus for today">
+                <div class="qb-break-title">End focus for today?</div>
+                <label class="qb-break-q">Why do you need to end it?</label>
+                <textarea class="qb-break-in" data-role="reason" rows="2" placeholder="Be honest…"></textarea>
+                <label class="qb-break-q">What is the most important thing you should be doing right now?</label>
+                <textarea class="qb-break-in" data-role="doing" rows="2" placeholder="The thing you're avoiding…"></textarea>
+                <div class="qb-break-actions">
+                    <button type="button" class="qb-break-btn" data-role="no">No, keep focusing</button>
+                    <button type="button" class="qb-break-btn qb-break-yes" data-role="yes" disabled>Yes, end for today</button>
+                </div>
+            </div>`;
+        document.body.append(wrap);
+
+        const reason = wrap.querySelector('[data-role="reason"]');
+        const doing = wrap.querySelector('[data-role="doing"]');
+        const yes = wrap.querySelector('[data-role="yes"]');
+        const close = () => {
+            document.removeEventListener('keydown', onKey, true);
+            wrap.remove();
+        };
+        const onKey = (e) => {
+            e.stopPropagation();          // never let typing reach the player
+            if (e.key === 'Escape') close();
+        };
+
+        const sync = () => { yes.disabled = !reason.value.trim() || !doing.value.trim(); };
+        reason.addEventListener('input', sync);
+        doing.addEventListener('input', sync);
+        document.addEventListener('keydown', onKey, true);
+        wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+        wrap.querySelector('[data-role="no"]').addEventListener('click', close);
+        yes.addEventListener('click', () => {
+            Storage.logFocusBreak(reason.value.trim(), doing.value.trim()).catch(() => {});
+            Storage.setSettings({ focusHideNow: false, focusSnoozeUntil: endOfToday() }).catch(() => {});
+            close();
+        });
+        reason.focus();
     }
 
     function syncFocusFabState() {
@@ -2510,6 +2828,7 @@
         if (typeof settings.focusMessage === 'string') focusMessage = settings.focusMessage;
         focusBeam = settings.focusBeam !== false;
         focusLockUntil = Number(settings.focusLockUntil) || 0;
+        focusSnoozeUntil = Number(settings.focusSnoozeUntil) || 0;
         applyOnWatchClass();
         applyFocusMode();
         rescanAll();

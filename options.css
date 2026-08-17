@@ -388,6 +388,15 @@ body {
     font-size: 13px;
 }
 
+/* Focus break entries stack instead of sitting on one row. */
+.recent-list li.focus-break {
+    display: block;
+    line-height: 1.45;
+}
+.focus-break-when { display: block; color: var(--text-mute); font-size: 11px; }
+.focus-break-reason { display: block; color: var(--text); }
+.focus-break-doing { display: block; color: var(--text-dim); font-size: 12px; }
+
 /* ── Import ──────────────────────────────────────────────────────── */
 
 .import-body {
