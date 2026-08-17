@@ -39,9 +39,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     }
     // Content scripts can't call openOptionsPage themselves.
     if (msg?.type === 'open-options') {
-        // openOptionsPage can't carry a hash, so deep links go through tabs.create.
-        if (msg.hash) chrome.tabs.create({ url: chrome.runtime.getURL('options.html' + msg.hash) });
-        else chrome.runtime.openOptionsPage();
+        // Always tabs.create, never openOptionsPage: it can't carry a hash, and
+        // in Vivaldi it silently does nothing. Same path the toolbar icon uses.
+        chrome.tabs.create({ url: chrome.runtime.getURL('options.html' + (msg.hash || '')) });
         return;
     }
     if (msg?.type === 'sync-summary') {
