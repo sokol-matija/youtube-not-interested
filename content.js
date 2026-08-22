@@ -34,6 +34,7 @@
     let focusActive = false;
     let focusLockUntil = 0;              // epoch ms: timed FAB lock; 0 = not locked
     let focusSnoozeUntil = 0;            // epoch ms: "ended for today" — schedule suppressed until then
+    let focusUntil = '';                 // 'YYYY-MM-DD': block lifts at the START of this day; '' = no end date
     // Friction (not security): same password as the options-page schedule unlock.
     const FOCUS_UNLOCK = 'j5q8rqwp521c1';
     const FOCUS_LOCK_DURATIONS = [       // dropdown on the masthead focus FAB
@@ -655,6 +656,7 @@
             // Scheduled Focus Mode — update vars + re-evaluate immediately.
             focusModeEnabled = !!newSettings.focusModeEnabled;
             focusDays = Array.isArray(newSettings.focusDays) ? newSettings.focusDays : [];
+            focusUntil = typeof newSettings.focusUntil === 'string' ? newSettings.focusUntil : focusUntil;
             focusStart = newSettings.focusStart || '09:00';
             focusEnd = newSettings.focusEnd || '17:00';
             focusHideNow = !!newSettings.focusHideNow;
@@ -844,6 +846,38 @@
 
     function focusSnoozed() { return focusSnoozeUntil > Date.now(); }
 
+    // End date, as local midnight at the START of that day — set 2026-09-03 and
+    // the block is gone the moment that day begins, not at the end of it.
+    // 0 when unset or malformed, so a bad string can never lift the block.
+    function focusUntilMs() {
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(focusUntil || '');
+        if (!m) return 0;
+        const d = new Date(+m[1], +m[2] - 1, +m[3]);
+        return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+    }
+
+    // Length of the daily window in minutes. 00:00–23:59 is 1439 of a possible
+    // 1440, so counting down to it is technically correct and practically a lie:
+    // the feed returns for one minute. Anything this wide is "all day".
+    const FOCUS_ALL_DAY_MIN = 1435;
+    function focusWindowMinutes() {
+        const toMin = (v) => {
+            const m = /^(\d{1,2}):(\d{2})$/.exec(v || '');
+            return m ? (+m[1]) * 60 + (+m[2]) : null;
+        };
+        const a = toMin(focusStart), b = toMin(focusEnd);
+        if (a === null || b === null || a === b) return 0;
+        return b > a ? b - a : 1440 - (a - b);
+    }
+    const focusIsAllDay = () => focusWindowMinutes() >= FOCUS_ALL_DAY_MIN;
+
+    // "03.09.2026"
+    function fmtFocusDate(ms) {
+        const d = new Date(ms);
+        const p = (n) => String(n).padStart(2, '0');
+        return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
+    }
+
     function focusShouldBeOn() {
         if (focusLocked()) return true; // timed lock forces focus on
         if (focusHideNow) return true;  // manual override — still wins over a snooze
@@ -880,7 +914,34 @@
         return `${m}min`;
     }
 
+    // Pages the focus blank covers. Home was the original; the rest are the
+    // feeds that pull you back in just as hard. Watch Later only — opening a
+    // playlist you deliberately picked is not the same as grazing the queue.
+    // 'you' is what YouTube renamed Library to; /feed/library redirects there on
+    // some accounts and not others, so both names have to be listed.
+    const FOCUS_SUBTYPES = ['home', 'subscriptions', 'history', 'library', 'you'];
+    const isWatchLater = () => /[?&]list=WL(&|$)/.test(location.search);
+    function focusPageEl() {
+        // The SPA keeps stale ytd-browse elements in the DOM after you navigate.
+        // Matching the first one meant prepending the card into a hidden leftover
+        // — the card vanished and the live page stayed visible. Take the shown one.
+        const b = document.querySelector('ytd-browse[page-subtype]:not([hidden])');
+        if (!b) return null;
+        const t = b.getAttribute('page-subtype');
+        if (FOCUS_SUBTYPES.includes(t)) return b;
+        if (t === 'playlist' && isWatchLater()) return b;
+        return null;
+    }
+
     function applyFocusMode() {
+        // End date reached → turn the schedule off for good. Without this the
+        // card would promise an end date it never delivers.
+        const untilMs = focusUntilMs();
+        if (untilMs && Date.now() >= untilMs) {
+            focusUntil = '';
+            focusModeEnabled = false;
+            Storage.setSettings({ focusUntil: '', focusModeEnabled: false }).catch(() => {});
+        }
         // Timed lock expired → clear it once so focus can fall back to schedule.
         if (focusLockUntil && focusLockUntil <= Date.now()) {
             focusLockUntil = 0;
@@ -888,6 +949,10 @@
         }
         const on = focusShouldBeOn();
         document.body.classList.toggle('quick-block-focus-mode', on);
+        // Watch Later needs location.search, which CSS can't read — so JS
+        // carries that one page as its own class. Every other blocked page is
+        // matched by page-subtype in styles.css.
+        document.body.classList.toggle('qb-focus-wl', on && isWatchLater());
         focusActive = on;
         if (on) injectFocusMessage();
         else removeFocusMessage();
@@ -895,10 +960,17 @@
     }
 
     function injectFocusMessage() {
-        const home = document.querySelector('ytd-browse[page-subtype="home"]');
-        if (!home) return;  // not on home yet — observer/nav retries
-        // Manual hide has no end boundary → no countdown line.
-        const left = focusHideNow ? '' : fmtFocusLeft(focusMinutesLeft(new Date()));
+        const home = focusPageEl();
+        if (!home) return;  // not on a blocked page yet — observer/nav retries
+        // Manual hide has no end boundary → no countdown line. With an end date
+        // the daily countdown is noise: what you want to know is the finish line.
+        const until = focusUntilMs();
+        const days = until ? Math.max(0, Math.ceil((until - Date.now()) / 86400000)) : 0;
+        const allDay = focusIsAllDay();
+        const pre = until ? 'Ends ' : allDay ? 'Hidden all day' : 'Feed back in ';
+        const left = (focusHideNow || (allDay && !until)) ? ''
+            : until ? `${fmtFocusDate(until)} · ${days} day${days === 1 ? '' : 's'} left`
+            : fmtFocusLeft(focusMinutesLeft(new Date()));
         let el = document.getElementById(FOCUS_MSG_ID);
         if (el) {
             if (el.classList.contains('qb-no-beam') === focusBeam) el.classList.toggle('qb-no-beam', !focusBeam);
@@ -908,10 +980,12 @@
             // loop → page freeze.
             const titleEl = el.querySelector('.qb-focus-title');
             if (titleEl && titleEl.textContent !== focusMessage) titleEl.textContent = focusMessage;
+            const preEl = el.querySelector('.qb-focus-pre');
+            if (preEl && preEl.textContent !== pre) preEl.textContent = pre;
             const leftEl = el.querySelector('.qb-focus-left');
             if (leftEl && leftEl.textContent !== left) leftEl.textContent = left;
             const subEl = el.querySelector('.qb-focus-sub');
-            const wantSub = focusHideNow ? 'none' : '';
+            const wantSub = (focusHideNow && !until) ? 'none' : '';
             if (subEl && subEl.style.display !== wantSub) subEl.style.display = wantSub;
             if (!home.contains(el)) home.prepend(el);
             return;
@@ -923,12 +997,13 @@
             <span class="qb-beam-bloom"></span>
             <div class="qb-focus-textwrap">
                 <div class="qb-focus-title"></div>
-                <div class="qb-focus-sub">Home feed back in <span class="qb-focus-left"></span></div>
+                <div class="qb-focus-sub"><span class="qb-focus-pre"></span><span class="qb-focus-left"></span></div>
             </div>
         </div>`;
         el.querySelector('.qb-focus-title').textContent = focusMessage;
+        el.querySelector('.qb-focus-pre').textContent = pre;
         el.querySelector('.qb-focus-left').textContent = left;
-        if (focusHideNow) el.querySelector('.qb-focus-sub').style.display = 'none';
+        if (focusHideNow && !until) el.querySelector('.qb-focus-sub').style.display = 'none';
         home.prepend(el);
     }
 
@@ -1042,6 +1117,9 @@
                 <textarea class="qb-break-in" data-role="reason" rows="2" placeholder="Be honest…"></textarea>
                 <label class="qb-break-q">What is the most important thing you should be doing right now?</label>
                 <textarea class="qb-break-in" data-role="doing" rows="2" placeholder="The thing you're avoiding…"></textarea>
+                <label class="qb-break-q">Password</label>
+                <input type="password" class="qb-break-in qb-break-pw" data-role="pw" autocomplete="off" placeholder="The one you set when you meant it…">
+                <div class="qb-break-err" data-role="err" hidden>Wrong password — focus stays on.</div>
                 <div class="qb-break-actions">
                     <button type="button" class="qb-break-btn" data-role="no">No, keep focusing</button>
                     <button type="button" class="qb-break-btn qb-break-yes" data-role="yes" disabled>Yes, end for today</button>
@@ -1061,13 +1139,29 @@
             if (e.key === 'Escape') close();
         };
 
-        const sync = () => { yes.disabled = !reason.value.trim() || !doing.value.trim(); };
+        const pw = wrap.querySelector('[data-role="pw"]');
+        const err = wrap.querySelector('[data-role="err"]');
+        const sync = () => {
+            yes.disabled = !reason.value.trim() || !doing.value.trim() || !pw.value;
+            err.hidden = true;
+        };
         reason.addEventListener('input', sync);
         doing.addEventListener('input', sync);
+        pw.addEventListener('input', sync);
         document.addEventListener('keydown', onKey, true);
         wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
         wrap.querySelector('[data-role="no"]').addEventListener('click', close);
         yes.addEventListener('click', () => {
+            // Two honest answers were friction; they were not a lock. Ending the
+            // day early is the one action here that undoes the whole schedule,
+            // so it costs the same password as turning the schedule off.
+            if (pw.value !== FOCUS_UNLOCK) {
+                err.hidden = false;
+                pw.value = '';
+                pw.focus();
+                yes.disabled = true;
+                return;
+            }
             Storage.logFocusBreak(reason.value.trim(), doing.value.trim()).catch(() => {});
             Storage.setSettings({ focusHideNow: false, focusSnoozeUntil: endOfToday() }).catch(() => {});
             close();
@@ -2851,6 +2945,7 @@
         applyPlaylistPanelMode();
         focusModeEnabled = !!settings.focusModeEnabled;
         focusDays = Array.isArray(settings.focusDays) ? settings.focusDays : [];
+        focusUntil = settings.focusUntil || '';
         focusStart = settings.focusStart || '09:00';
         focusEnd = settings.focusEnd || '17:00';
         focusHideNow = !!settings.focusHideNow;

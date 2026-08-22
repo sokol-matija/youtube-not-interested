@@ -1496,12 +1496,19 @@ body.quick-block-fullscreen #quick-block-summary-toast { display: none !importan
 
 /* ───────────────────────────────────────────────────────────────────────────
    Scheduled Focus Mode — blank the homepage feed during the schedule.
-   All hide rules are scoped under ytd-browse[page-subtype="home"] so only the
-   homepage is affected; subscriptions (page-subtype="subscriptions"), search,
-   and watch pages never match. Fails safe: no attribute → nothing hidden.
+   Hide rules are scoped per page-subtype (home, subscriptions, history,
+   library) plus Watch Later via the JS-set qb-focus-wl class, so search and
+   watch pages never match. Fails safe: no attribute → nothing hidden.
    ─────────────────────────────────────────────────────────────────────────── */
-body.quick-block-focus-mode ytd-browse[page-subtype="home"] #contents,
-body.quick-block-focus-mode ytd-browse[page-subtype="home"] #scroll-container {
+/* Hide every direct child of the browse page except our own card. Scoping to
+   #contents left the library/history grids, chips and buttons behind — those
+   live outside it, and the markup differs per page. This does not. */
+body.quick-block-focus-mode ytd-browse[page-subtype="home"] > *:not(#quick-block-focus-message),
+body.quick-block-focus-mode ytd-browse[page-subtype="subscriptions"] > *:not(#quick-block-focus-message),
+body.quick-block-focus-mode ytd-browse[page-subtype="history"] > *:not(#quick-block-focus-message),
+body.quick-block-focus-mode ytd-browse[page-subtype="library"] > *:not(#quick-block-focus-message),
+body.quick-block-focus-mode ytd-browse[page-subtype="you"] > *:not(#quick-block-focus-message),
+body.qb-focus-wl ytd-browse[page-subtype="playlist"] > *:not(#quick-block-focus-message) {
     display: none !important;
 }
 
@@ -1772,4 +1779,16 @@ body.quick-block-hide-description ytd-watch-metadata #description {
 #quick-block-focus-break .qb-break-yes[disabled] {
     opacity: 0.4;
     cursor: not-allowed;
+}
+
+/* Password row in the "end focus for today" modal. Shares .qb-break-in, but an
+   <input> ignores the textarea sizing, so it needs its own height. */
+.qb-break-pw {
+    height: 34px;
+    resize: none;
+}
+.qb-break-err {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #ff6b6b;
 }

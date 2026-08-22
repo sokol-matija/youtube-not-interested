@@ -185,8 +185,8 @@
                 <div class="card-header">Focus Mode</div>
                 <div class="row">
                     <div class="row-text">
-                        <span class="row-label">Hide home feed now</span>
-                        <span class="row-hint">Blanks the homepage immediately, ignoring the schedule.</span>
+                        <span class="row-label">Hide feeds now</span>
+                        <span class="row-hint">Blanks home, subscriptions, history, library and Watch Later immediately, ignoring the schedule.</span>
                     </div>
                     <label class="switch">
                         <input type="checkbox" id="focusHideNowToggle">
@@ -195,13 +195,20 @@
                 </div>
                 <div class="row">
                     <div class="row-text">
-                        <span class="row-label">Blank homepage during schedule</span>
-                        <span class="row-hint">Hides the home feed and shows a calm message. Homepage only.</span>
+                        <span class="row-label">Blank feeds during schedule</span>
+                        <span class="row-hint">Hides home, subscriptions, history, library and Watch Later, and shows a calm message.</span>
                     </div>
                     <label class="switch">
                         <input type="checkbox" id="focusEnabledToggle">
                         <span class="slider"></span>
                     </label>
+                </div>
+                <div class="row">
+                    <div class="row-text">
+                        <span class="row-label">Preset</span>
+                        <span class="row-hint">Shows which schedule is live. Switching while the schedule is on needs the password.</span>
+                    </div>
+                    <select id="focusPreset"></select>
                 </div>
                 <div class="row focus-days-row">
                     <span class="row-label">Days</span>
@@ -222,6 +229,13 @@
                 <div class="row">
                     <span class="row-label">To</span>
                     <input type="time" id="focusEnd" class="focus-time">
+                </div>
+                <div class="row">
+                    <div class="row-text">
+                        <span class="row-label">Runs until</span>
+                        <span class="row-hint">The block lifts at the start of this day and the schedule turns itself off. Leave empty for no end date.</span>
+                    </div>
+                    <input type="date" id="focusUntil">
                 </div>
                 <div class="row">
                     <span class="row-hint">If "To" is earlier than "From", the window runs overnight and the selected day is the evening it starts.</span>

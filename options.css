@@ -582,3 +582,15 @@ body {
     background: rgba(255, 255, 255, 0.05);
 }
 .shortcut-hint { font-size: 12px; color: var(--text-mute); }
+
+/* Native date picker, styled like the time inputs next to it. */
+.row input[type="date"] {
+    background: var(--input-bg, #1a1a1a);
+    color: inherit;
+    border: 1px solid var(--border, #333);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font: inherit;
+    color-scheme: dark;
+}
+.row input[type="date"]:disabled { opacity: .55; }

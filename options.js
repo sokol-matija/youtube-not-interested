@@ -192,6 +192,7 @@ async function render() {
     $('#focusEnabledToggle').checked = !!settings.focusModeEnabled;
     $('#focusStart').value = settings.focusStart || '09:00';
     $('#focusEnd').value   = settings.focusEnd || '17:00';
+    $('#focusUntil').value = settings.focusUntil || '';
     if (document.activeElement !== $('#focusMessage')) {
         $('#focusMessage').value = settings.focusMessage ?? 'You are free, do something that matters';
     }
@@ -201,6 +202,7 @@ async function render() {
         b.classList.toggle('active', focusDays.has(+b.dataset.day)));
     // While the schedule is on, lock days + times — editing them would dodge the
     // window. To change them, turn the schedule off first (password-gated).
+    $('#focusPreset').value = detectFocusPreset(settings);
     setFocusControlsLocked(!!settings.focusModeEnabled);
     focusSnoozeUntil = Number(settings.focusSnoozeUntil) || 0;
     renderFocusStatus();
@@ -331,6 +333,9 @@ function setFocusControlsLocked(locked) {
     document.querySelectorAll('#focusDays .focus-day').forEach(b => { b.disabled = locked; });
     $('#focusStart').disabled = locked;
     $('#focusEnd').disabled = locked;
+    // Locked with the rest: shortening the end date is just another way to
+    // dodge the window you committed to.
+    $('#focusUntil').disabled = locked;
 }
 let focusSnoozeUntil = 0;   // mirrors the setting, so the status line can read it
 function renderFocusStatus() {
@@ -371,10 +376,61 @@ $('#focusEnabledToggle').addEventListener('change', e => {
     }
     Storage.setSettings({ focusModeEnabled: e.target.checked });
 });
+// Two presets, because flipping between normal and exam lockdown by hand is
+// four fiddly controls. There is no preset editor — edit the values here.
+const FOCUS_PRESETS = {
+    workday: { label: 'Workday', settings: { focusDays: [1, 2, 3, 4, 5],       focusStart: '07:00', focusEnd: '12:00' } },
+    exam:    { label: 'Exam',    settings: { focusDays: [0, 1, 2, 3, 4, 5, 6], focusStart: '00:00', focusEnd: '23:59' } },
+};
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const dayKey = (d) => (Array.isArray(d) ? d : []).slice().sort((a, b) => a - b).join(',');
+function fmtPreset(p) {
+    const k = dayKey(p.focusDays);
+    const days = k === '0,1,2,3,4,5,6' ? 'every day'
+        : k === '1,2,3,4,5' ? 'Mon–Fri'
+        : p.focusDays.map(i => DAY_NAMES[i]).join(' ');
+    return `${days} ${p.focusStart}–${p.focusEnd}`;
+}
+// Which preset the live settings actually are. Nothing stores "current preset" —
+// deriving it means the dropdown cannot go stale when days/times change by hand.
+function detectFocusPreset(s) {
+    for (const [key, p] of Object.entries(FOCUS_PRESETS)) {
+        if (dayKey(p.settings.focusDays) === dayKey(s.focusDays)
+            && p.settings.focusStart === s.focusStart
+            && p.settings.focusEnd === s.focusEnd) return key;
+    }
+    return 'custom';
+}
+$('#focusPreset').innerHTML =
+    Object.entries(FOCUS_PRESETS)
+        .map(([k, p]) => `<option value="${k}">${p.label} — ${fmtPreset(p.settings)}</option>`)
+        .join('')
+    + '<option value="custom">Custom</option>';
+// 00:00 -> 00:00 is not a valid all-day window: focusActiveNow() and the
+// content script both bail when start === end. 23:59 is the real maximum.
+$('#focusPreset').addEventListener('change', async (e) => {
+    const preset = FOCUS_PRESETS[e.target.value];
+    // "Custom" is a readout, not a destination — snap back to what is really set.
+    if (!preset) { await render(); return; }
+    // Same gate as turning the schedule off: while it is running, swapping the
+    // window is just another way to widen it, so it costs the password.
+    if ($('#focusEnabledToggle').checked) {
+        const pw = prompt('Enter password to switch the focus schedule:');
+        if (pw !== FOCUS_UNLOCK) {
+            if (pw !== null) showToast('Wrong password — schedule unchanged');
+            await render();
+            return;
+        }
+    }
+    await Storage.setSettings(preset.settings);
+    await render();
+    showToast(`Switched to ${preset.label}`);
+});
 $('#focusMessage').addEventListener('input', e => Storage.setSettings({ focusMessage: e.target.value }));
 $('#focusBeamToggle').addEventListener('change', e => Storage.setSettings({ focusBeam: e.target.checked }));
 $('#focusStart').addEventListener('change', e => Storage.setSettings({ focusStart: e.target.value || '09:00' }));
 $('#focusEnd').addEventListener('change', e => Storage.setSettings({ focusEnd: e.target.value || '17:00' }));
+$('#focusUntil').addEventListener('change', e => Storage.setSettings({ focusUntil: e.target.value }));
 document.querySelectorAll('#focusDays .focus-day').forEach(btn => {
     btn.addEventListener('click', async () => {
         btn.classList.toggle('active');
