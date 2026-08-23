@@ -247,6 +247,26 @@ body.quick-block-cinema.quick-block-on-watch #movie_player video {
     object-fit: contain !important;
 }
 
+/* Focus comments — the comments panel alone, pinned over the viewport.
+   Two sources: the engagement panel (wide/theater layout) or the inline
+   ytd-comments below the video. Use the inline one only when the panel isn't
+   expanded, so the two can never overlap. */
+body.quick-block-focus-comments.quick-block-on-watch ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"],
+body.quick-block-focus-comments.quick-block-on-watch:not(:has(ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"][visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"])) ytd-comments#comments {
+    position: fixed !important;
+    inset: 0 !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    z-index: 6000 !important;
+    overflow-y: auto !important;
+    background: var(--yt-spec-base-background, #0f0f0f) !important;
+    padding: 24px max(24px, calc((100vw - 900px) / 2)) !important;
+}
+body.quick-block-focus-comments.quick-block-on-watch {
+    overflow: hidden !important;
+}
+
 /* Hide search bar on /watch pages */
 body.quick-block-on-watch.quick-block-hide-search-watch ytd-masthead #center {
     display: none !important;

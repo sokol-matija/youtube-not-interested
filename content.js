@@ -212,6 +212,12 @@
         document.body.classList.toggle('quick-block-hide-comments', !!on);
     }
 
+    // Focus comments: pin the comments panel over the whole viewport, everything
+    // else stays where it is (CSS covers it). Watch page only — see styles.css.
+    function applyFocusCommentsToggle(on) {
+        document.body.classList.toggle('quick-block-focus-comments', !!on);
+    }
+
     function applyShareToggle(on) {
         document.body.classList.toggle('quick-block-hide-share', !!on);
     }
@@ -294,6 +300,7 @@
         { key: 'focusHideNow',       name: 'Focus mode: hide feed now' },
         { key: 'autoOpenComments',   name: 'Auto-open comments' },
         { key: 'hideBottomComments', name: 'Hide comments section' },
+        { key: 'focusComments',      name: 'Focus comments (comments only)' },
         { key: 'hideDescription',    name: 'Hide description' },
         { key: 'hideShareButton',    name: 'Hide share button' },
         { key: 'hideMiniGuide',      name: 'Hide collapsed sidebar' },
@@ -546,6 +553,13 @@
     // than YouTube's own document-capture Escape handler, which otherwise ate the
     // first press. stopImmediatePropagation keeps it from reaching them at all.
     window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !palette
+            && document.body.classList.contains('quick-block-focus-comments')) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            Storage.setSettings({ focusComments: false });
+            return;
+        }
         if (e.key === 'Escape' && palette) {
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -633,6 +647,7 @@
             if (wasEnabled && !hideEnabled) unhideAll();
             else if (!wasEnabled && hideEnabled) rescanAll();
             applyBottomCommentsToggle(newSettings.hideBottomComments);
+            applyFocusCommentsToggle(newSettings.focusComments);
             applyShareToggle(newSettings.hideShareButton);
             applyThanksToggle(newSettings.hideThanksButton);
             applySearchOnWatchToggle(newSettings.hideSearchOnWatch);
@@ -2930,6 +2945,7 @@
         karaokeEnabled = settings.karaokeEnabled !== false;
         karaokeWordCount = normalizeWordCount(settings.karaokeWordCount);
         applyBottomCommentsToggle(settings.hideBottomComments);
+        applyFocusCommentsToggle(settings.focusComments);
         applyShareToggle(settings.hideShareButton);
         applyThanksToggle(settings.hideThanksButton);
         applySearchOnWatchToggle(settings.hideSearchOnWatch);
