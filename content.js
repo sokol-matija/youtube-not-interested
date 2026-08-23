@@ -300,7 +300,7 @@
         { key: 'focusHideNow',       name: 'Focus mode: hide feed now' },
         { key: 'autoOpenComments',   name: 'Auto-open comments' },
         { key: 'hideBottomComments', name: 'Hide comments section' },
-        { key: 'focusComments',      name: 'Focus comments (comments only)' },
+        { key: 'focusComments',      name: 'Focus comments (comments only)', close: true },
         { key: 'hideDescription',    name: 'Hide description' },
         { key: 'hideShareButton',    name: 'Hide share button' },
         { key: 'hideMiniGuide',      name: 'Hide collapsed sidebar' },
@@ -431,6 +431,7 @@
                 // be flipped in a row. storage.onChanged applies it to the page.
                 cfg[item.key] = !cfg[item.key];
                 Storage.setSettings({ [item.key]: cfg[item.key] }).catch(() => {});
+                if (item.close) { closePalette(); return; }   // overlay row: get out of the way
                 render();
                 return;
             }
