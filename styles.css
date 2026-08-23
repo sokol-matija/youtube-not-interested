@@ -251,8 +251,8 @@ body.quick-block-cinema.quick-block-on-watch #movie_player video {
    Two sources: the engagement panel (wide/theater layout) or the inline
    ytd-comments below the video. Use the inline one only when the panel isn't
    expanded, so the two can never overlap. */
-body.quick-block-focus-comments.quick-block-on-watch ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"],
-body.quick-block-focus-comments.quick-block-on-watch:not(:has(ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"][visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"])) ytd-comments#comments {
+body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen) ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"],
+body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen):not(:has(ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"][visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"])) ytd-comments#comments {
     position: fixed !important;
     inset: 10px !important;
     max-width: none !important;
@@ -265,7 +265,7 @@ body.quick-block-focus-comments.quick-block-on-watch:not(:has(ytd-engagement-pan
     border-radius: 14px !important;
     padding: 24px !important;
 }
-body.quick-block-focus-comments.quick-block-on-watch {
+body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen) {
     overflow: hidden !important;
 }
 
