@@ -250,21 +250,43 @@ body.quick-block-cinema.quick-block-on-watch #movie_player video {
 /* Focus comments — the comments panel alone, pinned over the viewport.
    Two sources: the engagement panel (wide/theater layout) or the inline
    ytd-comments below the video. Use the inline one only when the panel isn't
-   expanded, so the two can never overlap. */
+   expanded, so the two can never overlap. Off in fullscreen. */
 body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen) ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"],
 body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen):not(:has(ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"][visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"])) ytd-comments#comments {
     position: fixed !important;
-    inset: 10px !important;
+    /* Explicit edges, not `inset` — YouTube's own height/max-height on the
+       panel otherwise wins and leaves the page showing underneath. */
+    top: 10px !important;
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
     max-width: none !important;
     max-height: none !important;
     margin: 0 !important;
     z-index: 6000 !important;
-    overflow-y: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    /* hidden, not auto: clips the panel's own square-cornered background to
+       the radius. The inner #content does the scrolling instead. */
+    overflow: hidden !important;
     background: var(--yt-spec-base-background, #0f0f0f) !important;
     border: 1px solid var(--yt-spec-10-percent-layer, rgba(255, 255, 255, 0.2)) !important;
     border-radius: 14px !important;
-    padding: 24px !important;
 }
+/* Header stays put, the comment list takes the remaining height and scrolls. */
+body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen) ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"] > #content,
+body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen) ytd-comments#comments > #sections {
+    flex: 1 1 auto !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    padding: 0 16px !important;
+}
+
 body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen) {
     overflow: hidden !important;
 }
