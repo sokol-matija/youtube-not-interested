@@ -218,6 +218,22 @@
         document.body.classList.toggle('quick-block-focus-comments', !!on);
     }
 
+    // Click the "Comments" heading (panel header or the inline comments header)
+    // to flip focus comments — same toggle the palette row writes, so one code
+    // path applies it. Delegated: YouTube rebuilds these headers on every nav.
+    document.addEventListener('click', (e) => {
+        const title = e.target.closest?.(
+            'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"] #title,'
+            + ' ytd-comments#comments ytd-comments-header-renderer #title'
+        );
+        if (!title) return;
+        e.preventDefault();
+        e.stopPropagation();
+        Storage.getSettings().then(s =>
+            Storage.setSettings({ focusComments: !s.focusComments })
+        ).catch(() => {});
+    }, true);
+
     function applyShareToggle(on) {
         document.body.classList.toggle('quick-block-hide-share', !!on);
     }

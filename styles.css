@@ -287,6 +287,12 @@ body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen
     padding: 0 16px !important;
 }
 
+/* The heading doubles as the focus-comments toggle. */
+ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"] #title,
+ytd-comments#comments ytd-comments-header-renderer #title {
+    cursor: pointer;
+}
+
 body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen) {
     overflow: hidden !important;
 }
