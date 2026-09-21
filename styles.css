@@ -277,10 +277,7 @@ body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen
     border-radius: 14px !important;
 }
 /* Header stays put, the comment list takes the remaining height and scrolls.
-   Reading column: cap the line length at ~760px and centre it with padding
-   (not max-width) so the scrollbar stays on the panel edge. zoom is the
-   "Comments text" size stepped from ⌘K; the cap is in zoomed px, so bigger
-   text keeps the same characters per line. */
+   zoom is the "Comments text" size stepped from ⌘K. */
 body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen) ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"] > #content,
 body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen) ytd-comments#comments > #sections {
     flex: 1 1 auto !important;
@@ -288,7 +285,7 @@ body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen
     max-height: none !important;
     min-height: 0 !important;
     overflow-y: auto !important;
-    padding: 0 max(16px, calc((100% - 760px) / 2)) 32px !important;
+    padding: 0 16px !important;
     zoom: var(--qb-fc-scale, 1);
 }
 
