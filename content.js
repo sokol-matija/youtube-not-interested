@@ -216,6 +216,14 @@
     // else stays where it is (CSS covers it). Watch page only — see styles.css.
     function applyFocusCommentsToggle(on) {
         document.body.classList.toggle('quick-block-focus-comments', !!on);
+        // A closed panel would leave the overlay showing an empty inline
+        // ytd-comments (wide layout keeps the list in the panel) — open it.
+        if (on) openCommentsPanel();
+    }
+
+    // "Comments text" size from the palette; only the focus overlay reads it.
+    function applyFocusCommentsScale(scale) {
+        document.body.style.setProperty('--qb-fc-scale', String(scale || 1));
     }
 
     // Click the "Comments" heading (panel header or the inline comments header)
@@ -318,6 +326,7 @@
         { key: 'hideBottomComments', name: 'Hide comments section' },
         { key: 'focusComments',      name: 'Focus comments (comments only)', close: true },
         { key: 'hideDescription',    name: 'Hide description' },
+        { key: 'hideSearchOnWatch',  name: 'Hide search bar (watch page)' },
         { key: 'hideShareButton',    name: 'Hide share button' },
         { key: 'hideMiniGuide',      name: 'Hide collapsed sidebar' },
         { key: 'autoHideMasthead',   name: 'Auto-hide top bar on scroll' },
@@ -338,7 +347,7 @@
         moon:    '<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
     };
 
-    const PALETTE_PLACEHOLDER = 'Go to, toggle a setting, or run an action…';
+    const PALETTE_PLACEHOLDER = 'Go to, toggle, run · → nickname · s␣ search';
 
     function closePalette() {
         if (!palette) return;
@@ -369,11 +378,14 @@
         let profiles = [];   // summary profiles, for the submenu
         let current = [];    // rows as last rendered, index-aligned with the <li>s
         let sel = 0;
-        let mode = null;     // null = root list, 'profiles' = second level
+        let mode = null;     // null = root list, 'profiles' | 'search' | 'nick' = second level
+        let nickTarget = null;   // row being nicknamed while mode === 'nick'
 
         // Page-scoped availability, decided once per open.
         const videoId = currentWatchVideoId();
         const hasVideo = !!document.querySelector('video');
+        const commentsClosed = document.querySelector('button[aria-label="Comments"]')
+            ?.getAttribute('aria-pressed') === 'false';
 
         const actionRows = () => [
             ...(videoId ? [
@@ -381,7 +393,15 @@
                 { action: 'copyLink',  name: 'Copy video link',           alias: 'url share',     glyph: 'link' },
                 { action: 'copyStamp', name: 'Copy link at current time', alias: 'timestamp url', glyph: 'link' },
                 { action: 'channel',   name: 'Open channel of this video', alias: 'creator',      glyph: 'user' },
+                { action: 'fcBigger',  name: 'Comments text: bigger',  alias: 'font size zoom focus +', glyph: 'text',
+                  badge: `${(cfg.focusCommentsScale || 1).toFixed(1)}×` },
+                { action: 'fcSmaller', name: 'Comments text: smaller', alias: 'font size zoom focus -', glyph: 'text',
+                  badge: `${(cfg.focusCommentsScale || 1).toFixed(1)}×` },
             ] : []),
+            ...(commentsClosed ? [
+                { action: 'openComments', name: 'Open comments panel', alias: 'show reopen bring back', glyph: 'text' },
+            ] : []),
+            { action: 'search', name: 'Search YouTube…', alias: 'find query', glyph: 'chevron' },
             ...(hasVideo ? [
                 { action: 'pip', name: 'Toggle picture-in-picture', alias: 'pip float', glyph: 'pip' },
             ] : []),
@@ -395,16 +415,40 @@
             { action: 'options',  name: 'Focus break history', hash: '#focus-breaks', alias: 'dnd log reasons why', glyph: 'moon' },
         ];
 
+        // Stable per-row id — what a nickname is stored under.
+        const rid = s => s.key || s.url || s.profileId || (s.action + (s.hash || ''));
+
+        // Rank a row against the query: nickname hit, then name prefix, then
+        // anything containing it. "com" therefore lists the row nicknamed
+        // "co" first instead of whichever comments row sits first in the array.
+        const rank = (s, q) => {
+            const nick = (cfg.paletteNicks || {})[rid(s)];
+            const name = s.name.toLowerCase();
+            if (nick && nick.startsWith(q)) return 0;
+            if (name.startsWith(q)) return 1;
+            if (name.includes(q)) return 2;
+            if ((s.alias || '').includes(q)) return 3;
+            return 4;
+        };
+
         // Rows are built with the DOM API, never innerHTML — profile names are
         // user-authored and video/channel text is remote.
         const render = () => {
-            const q = input.value.trim().toLowerCase();
-            const source = mode === 'profiles'
-                ? profiles.map(p => ({ profileId: p.id, name: p.name, glyph: 'text' }))
-                : [...PALETTE_STATIC, ...PALETTE_TOGGLES, ...actionRows()];
-            current = source
-                .filter(s => s.name.toLowerCase().includes(q) || (s.alias || '').includes(q))
-                .slice(0, 12);
+            const raw = input.value.trim();
+            const q = raw.toLowerCase();
+            if (mode === 'nick') {
+                current = [nickTarget];
+            } else if (mode === 'search') {
+                current = raw ? [{ url: `/results?search_query=${encodeURIComponent(raw)}`, name: `Search YouTube for “${raw}”` }] : [];
+            } else {
+                const source = mode === 'profiles'
+                    ? profiles.map(p => ({ profileId: p.id, name: p.name, glyph: 'text' }))
+                    : [...PALETTE_STATIC, ...PALETTE_TOGGLES, ...actionRows()];
+                current = (q
+                    ? source.map(s => [rank(s, q), s]).filter(([r]) => r < 4).sort((a, b) => a[0] - b[0]).map(([, s]) => s)
+                    : source
+                ).slice(0, 12);
+            }
             sel = Math.min(sel, Math.max(current.length - 1, 0));
             ul.replaceChildren(...current.map((s, i) => {
                 const li = document.createElement('li');
@@ -414,11 +458,18 @@
                 ico.className = 'qb-pal-ico';
                 ico.innerHTML = PALETTE_ICON[s.glyph] || PALETTE_ICON[s.key ? 'sliders' : 'arrow'];
                 li.append(ico, document.createTextNode(s.name));
-                if (s.key) {
+                const nick = (cfg.paletteNicks || {})[rid(s)];
+                if (nick) {
+                    const kbd = document.createElement('kbd');
+                    kbd.className = 'qb-pal-nick';
+                    kbd.textContent = nick;
+                    li.append(kbd);
+                }
+                if (s.key || s.badge) {
                     const on = !!cfg[s.key];
                     const sw = document.createElement('span');
                     sw.className = on ? 'qb-pal-sw on' : 'qb-pal-sw';
-                    sw.textContent = on ? 'ON' : 'OFF';
+                    sw.textContent = s.badge || (on ? 'ON' : 'OFF');
                     li.append(sw);
                 } else if (s.profileId && s.profileId === cfg.activeSummaryProfileId) {
                     const dot = document.createElement('span');
@@ -431,12 +482,23 @@
             ul.querySelector('li.sel')?.scrollIntoView({ block: 'nearest' });
         };
 
-        const toRoot = () => {
-            mode = null;
-            input.value = '';
-            input.placeholder = PALETTE_PLACEHOLDER;
+        const toMode = (m, placeholder, value = '') => {
+            mode = m;
+            input.value = value;
+            input.placeholder = placeholder;
             sel = 0;
             render();
+        };
+        const toRoot = () => toMode(null, PALETTE_PLACEHOLDER);
+        const toSearch = () => toMode('search', 'Search YouTube…');
+
+        const saveNick = () => {
+            const nicks = { ...(cfg.paletteNicks || {}) };
+            const v = input.value.trim().toLowerCase();
+            if (v) nicks[rid(nickTarget)] = v; else delete nicks[rid(nickTarget)];
+            cfg.paletteNicks = nicks;
+            Storage.setSettings({ paletteNicks: nicks }).catch(() => {});
+            toRoot();
         };
 
         // Shared by Enter and by clicking a row.
@@ -461,11 +523,15 @@
                 location.assign(item.url);
                 return;
             }
-            if (item.action === 'profiles') {
-                mode = 'profiles';
-                input.value = '';
-                input.placeholder = 'Summary style…';
-                sel = 0;
+            if (item.action === 'profiles') { toMode('profiles', 'Summary style…'); return; }
+            if (item.action === 'search') { toSearch(); return; }
+            if (item.action === 'fcBigger' || item.action === 'fcSmaller') {
+                // Stays open: the overlay sits under the palette, so the change is
+                // visible while stepping. Same 0.8–2 range as the palette scale.
+                const step = item.action === 'fcBigger' ? 0.1 : -0.1;
+                const next = Math.round(((cfg.focusCommentsScale || 1) + step) * 10) / 10;
+                cfg.focusCommentsScale = Math.min(2, Math.max(0.8, next));
+                Storage.setSettings({ focusCommentsScale: cfg.focusCommentsScale }).catch(() => {});
                 render();
                 return;
             }
@@ -484,6 +550,9 @@
                     break;
                 case 'pip':
                     togglePip();
+                    break;
+                case 'openComments':
+                    openCommentsPanel();
                     break;
                 case 'copyLink':
                     navigator.clipboard.writeText(`https://youtu.be/${videoId}`).catch(() => {});
@@ -507,7 +576,12 @@
             }
         };
 
-        input.addEventListener('input', () => { sel = 0; render(); });
+        input.addEventListener('input', () => {
+            // "s " at the root jumps straight into search mode.
+            if (!mode && /^s $/i.test(input.value)) { toSearch(); return; }
+            sel = 0;
+            render();
+        });
 
         // stopPropagation is load-bearing: without it, typing "later" would seek
         // and toggle captions on the video underneath, and trip our own p / c keys.
@@ -521,15 +595,25 @@
                 e.preventDefault();
                 sel = Math.max(sel - 1, 0);
                 render();
+            } else if (e.key === 'ArrowRight' && !mode && current[sel]
+                && input.selectionStart === input.value.length) {
+                // Caret already at the end, so the arrow has nothing else to do:
+                // open the nickname editor for the highlighted row.
+                e.preventDefault();
+                nickTarget = current[sel];
+                toMode('nick', `Nickname for “${nickTarget.name}” — Enter saves, empty removes`,
+                    (cfg.paletteNicks || {})[rid(nickTarget)] || '');
+                input.select();
             } else if (e.key === 'Enter') {
                 e.preventDefault();
-                activate(current[sel]);
+                if (mode === 'nick') saveNick();
+                else activate(current[sel]);
             }
         });
 
         ul.addEventListener('click', (e) => {
             const li = e.target.closest('li');
-            if (li) activate(current[+li.dataset.i]);
+            if (li && mode !== 'nick') activate(current[+li.dataset.i]);
         });
 
         // Vivaldi (and Chrome with some settings) swallow the first Escape at
@@ -665,6 +749,7 @@
             else if (!wasEnabled && hideEnabled) rescanAll();
             applyBottomCommentsToggle(newSettings.hideBottomComments);
             applyFocusCommentsToggle(newSettings.focusComments);
+            applyFocusCommentsScale(newSettings.focusCommentsScale);
             applyShareToggle(newSettings.hideShareButton);
             applyThanksToggle(newSettings.hideThanksButton);
             applySearchOnWatchToggle(newSettings.hideSearchOnWatch);
@@ -1332,7 +1417,8 @@
         if (commentsAutoOpenedFor === id) return;
         if (!extensionAlive()) return;
         const settings = await Storage.getSettings();
-        if (!settings.autoOpenComments) return;
+        // Focus comments implies auto-open: the overlay is empty without the panel.
+        if (!settings.autoOpenComments && !settings.focusComments) return;
         const btn = document.querySelector('ytd-comments-header-renderer button[aria-label="Comments"], #comments button[aria-label="Comments"], button[aria-label="Comments"]');
         if (!btn) return;
         const pressed = btn.getAttribute('aria-pressed');
@@ -1376,6 +1462,14 @@
         snap();
     }
 
+    // The Comments toggle lives inside ytd-comments#comments, so "Hide comments
+    // section" also hides the only way to reopen a closed panel. A display:none
+    // button still takes .click(), which the palette row and focus mode rely on.
+    function openCommentsPanel() {
+        const btn = document.querySelector('button[aria-label="Comments"]');
+        if (btn?.getAttribute('aria-pressed') === 'false') clickCommentsButtonWithoutJump(btn);
+    }
+
     async function reopenCommentsAfterFullscreenExit() {
         if (document.fullscreenElement) return; // entering, ignore
         if (!currentWatchVideoId()) return;
@@ -1384,10 +1478,7 @@
         if (!settings.autoOpenComments) return;
         // Give YouTube a beat to settle after fullscreen exit
         await new Promise(r => setTimeout(r, 300));
-        const commentsBtn = document.querySelector('button[aria-label="Comments"]');
-        if (commentsBtn && commentsBtn.getAttribute('aria-pressed') === 'false') {
-            clickCommentsButtonWithoutJump(commentsBtn);
-        }
+        openCommentsPanel();
     }
 
     document.addEventListener('fullscreenchange', reopenCommentsAfterFullscreenExit);
@@ -2963,6 +3054,7 @@
         karaokeWordCount = normalizeWordCount(settings.karaokeWordCount);
         applyBottomCommentsToggle(settings.hideBottomComments);
         applyFocusCommentsToggle(settings.focusComments);
+        applyFocusCommentsScale(settings.focusCommentsScale);
         applyShareToggle(settings.hideShareButton);
         applyThanksToggle(settings.hideThanksButton);
         applySearchOnWatchToggle(settings.hideSearchOnWatch);

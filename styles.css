@@ -276,7 +276,11 @@ body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen
     border: 1px solid var(--yt-spec-10-percent-layer, rgba(255, 255, 255, 0.2)) !important;
     border-radius: 14px !important;
 }
-/* Header stays put, the comment list takes the remaining height and scrolls. */
+/* Header stays put, the comment list takes the remaining height and scrolls.
+   Reading column: cap the line length at ~760px and centre it with padding
+   (not max-width) so the scrollbar stays on the panel edge. zoom is the
+   "Comments text" size stepped from ⌘K; the cap is in zoomed px, so bigger
+   text keeps the same characters per line. */
 body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen) ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"] > #content,
 body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen) ytd-comments#comments > #sections {
     flex: 1 1 auto !important;
@@ -284,7 +288,8 @@ body.quick-block-focus-comments.quick-block-on-watch:not(.quick-block-fullscreen
     max-height: none !important;
     min-height: 0 !important;
     overflow-y: auto !important;
-    padding: 0 16px !important;
+    padding: 0 max(16px, calc((100% - 760px) / 2)) 32px !important;
+    zoom: var(--qb-fc-scale, 1);
 }
 
 /* The heading doubles as the focus-comments toggle. */
@@ -1755,6 +1760,17 @@ body.quick-block-hide-description ytd-watch-metadata #description {
     color: rgba(109, 180, 255, 0.7);
     font-size: 0.65em;
 }
+/* Nickname (→ on a row to edit). Pushes right; the ON/OFF pill follows it. */
+#qb-palette li .qb-pal-nick {
+    margin-left: auto;
+    flex: none;
+    font: 600 0.72em ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 0.15em 0.5em;
+    border-radius: 4px;
+    border: 1px solid rgba(109, 180, 255, 0.4);
+    color: #cbd5e1;
+}
+#qb-palette li .qb-pal-nick + .qb-pal-sw { margin-left: 0.5em; }
 
 /* ── "End focus for today" confirmation ─────────────────────────────────────
    Same dark card language as the ⌘K palette. Backdrop click / Escape = cancel. */
