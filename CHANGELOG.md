@@ -1,3 +1,28 @@
+# [1.7.0](https://github.com/sokol-matija/youtube-not-interested/compare/v1.6.2...v1.7.0) (2026-10-28)
+
+
+### Bug Fixes
+
+* **focus:** exclude fullscreen mode from focus comments positioning ([0f2ea63](https://github.com/sokol-matija/youtube-not-interested/commit/0f2ea639f01595a63dc92ca70a11043cb37c37ea))
+* **focus:** refine focus comments panel layout and scrolling ([82c39be](https://github.com/sokol-matija/youtube-not-interested/commit/82c39becc7d26fefc1de81fd5a034018adcc005a))
+* **focus:** simplify comments panel styling and remove max-width constraint ([820cfb5](https://github.com/sokol-matija/youtube-not-interested/commit/820cfb5d3abeadd7343a3aa2093cd6f4eafcd14e))
+* **options:** always use tabs.create to open options, fixes Vivaldi ([d0c9b48](https://github.com/sokol-matija/youtube-not-interested/commit/d0c9b4809a639030a2b2e2435214a90c841ebbc8))
+* **palette:** add blur and mousedown handlers for Escape UX ([65e6bcb](https://github.com/sokol-matija/youtube-not-interested/commit/65e6bcb794799238dff3444000a8b443e0077b3a))
+* **palette:** defer palette cleanup until after blur handler exits ([b26c42d](https://github.com/sokol-matija/youtube-not-interested/commit/b26c42df11cb9086b3872afbcfdd73e0382e4f97))
+* **palette:** handle Escape key in document capture phase ([33ce2a4](https://github.com/sokol-matija/youtube-not-interested/commit/33ce2a48937db1325767c0921e5f66bffa03442e))
+* **palette:** use window listener for Escape key intercept ([93e9c3d](https://github.com/sokol-matija/youtube-not-interested/commit/93e9c3d32c8fc4e9c4033f0e106f8cbbe75fa34e))
+
+
+### Features
+
+* **focus:** harden focus mode into a real study block ([206e330](https://github.com/sokol-matija/youtube-not-interested/commit/206e3307cef32f79b4faacc7c90b8f34108f8168))
+* **focus:** toggle focus comments via header click ([0fe30ce](https://github.com/sokol-matija/youtube-not-interested/commit/0fe30ce8fe92851dbeb2b9117616064c4306d41a))
+* **palette:** add row nicknames with improved help text ([b073902](https://github.com/sokol-matija/youtube-not-interested/commit/b07390260c513479c37436c29fb8d94dda13eaab))
+* **palette:** add sizing control slider in options ([05f08ed](https://github.com/sokol-matija/youtube-not-interested/commit/05f08ed4eea34f6d690a56c4066d788946f2a5f2))
+* **palette:** command palette, focus snooze, and break history ([5f7d0c4](https://github.com/sokol-matija/youtube-not-interested/commit/5f7d0c4cbb4275739158bd1549aa0ef78d3cb259))
+* **palette:** style focus comments overlay and auto-close on select ([35ec833](https://github.com/sokol-matija/youtube-not-interested/commit/35ec83359221563b02a8133e4e94fd31ffdda3fb))
+* **watch:** add focus comments mode ([d41ae48](https://github.com/sokol-matija/youtube-not-interested/commit/d41ae4855f2b9d02269e3fdb70ca7c74f59fb4b8))
+
 ## [1.6.2](https://github.com/sokol-matija/youtube-not-interested/compare/v1.6.1...v1.6.2) (2026-08-16)
 
 
